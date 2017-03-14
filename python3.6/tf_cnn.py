@@ -74,7 +74,7 @@ convpool1 = conv_pool_layer(images, 1, CONVPOOL1_CHANNELS, "convpool1")
 convpool2 = conv_pool_layer(convpool1, CONVPOOL1_CHANNELS, CONVPOOL2_CHANNELS, "convpool2")
 
 # flattened output of the second conv-pool layer
-convpool2_dim = int(((IMAGE_SIZE / 4) ** 2) * CONVPOOL2_CHANNELS)
+convpool2_dim = ((IMAGE_SIZE // 4) ** 2) * CONVPOOL2_CHANNELS
 convpool2_flat = tf.reshape(convpool2, [-1, convpool2_dim])
 
 # last two network layers: densely connected hidden and output layers
