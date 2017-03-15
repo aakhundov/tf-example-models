@@ -1,5 +1,5 @@
 # tf-example-models
-TensorFlow-based implementation of several machine learning models:
+TensorFlow-based implementation of several machine learning models (first three - LogReg, MLP, and CNN - inspired by Google tutorials from tensorflow.org):
 
 - Logistic Regression (tf_logreg.py)
 - Multi-layer Perceptron (tf_mlp.py)
