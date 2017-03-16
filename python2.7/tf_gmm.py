@@ -148,7 +148,8 @@ for step in range(TRAINING_STEPS):
     previous_likelihood = current_likelihood
 
 # fetching final values of the parameters
-final_means, final_variances = sess.run([means, variances])
+final_means = means.eval(sess)
+final_variances = variances.eval(sess)
 
 # plotting the obtained Gaussian components over the data
 plot_fitted_data(data, final_means, final_variances)
