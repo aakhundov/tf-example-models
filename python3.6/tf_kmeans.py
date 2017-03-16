@@ -61,8 +61,8 @@ data, true_means, true_variances, true_weights = generate_gmm_data(DATA_POINTS, 
 input = tf.placeholder(tf.float32, [None, DIMENSIONS])
 
 # trainable variables: clusters means
-random_points = tf.random_crop(input, [CLUSTERS, DIMENSIONS])
-means = tf.Variable(random_points, dtype=tf.float32)
+random_point_ids = tf.squeeze(tf.multinomial(tf.ones([1, tf.shape(input)[0]]), CLUSTERS))
+means = tf.Variable(tf.gather(input, random_point_ids), dtype=tf.float32)
 
 # E-step: recomputing cluster assignments according to the current means
 inputs_ex, means_ex = tf.expand_dims(input, 0), tf.expand_dims(means, 1)

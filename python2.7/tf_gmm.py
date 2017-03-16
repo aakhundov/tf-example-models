@@ -73,9 +73,10 @@ dim_means = tf.reduce_mean(input, 0)
 dim_distances = tf.squared_difference(input, tf.expand_dims(dim_means, 0))
 dim_variances = tf.reduce_sum(dim_distances, 0) / tf.cast(tf.shape(input)[0], tf.float64)
 avg_variance = tf.cast(tf.reduce_sum(dim_variances) / COMPONENTS / DIMENSIONS, tf.float64)
+rand_point_ids = tf.squeeze(tf.multinomial(tf.ones([1, tf.shape(input)[0]]), COMPONENTS))
 
 # trainable variables: component means, variances, and weights
-means = tf.Variable(tf.random_crop(input, [COMPONENTS, DIMENSIONS]), dtype=tf.float64)
+means = tf.Variable(tf.gather(input, rand_point_ids), dtype=tf.float64)
 variances = tf.Variable(tf.cast(tf.ones([COMPONENTS, DIMENSIONS]), tf.float64) * avg_variance)
 weights = tf.Variable(tf.cast(tf.fill([COMPONENTS], 1. / COMPONENTS), tf.float64))
 
