@@ -12,8 +12,9 @@ TRAINING_STEPS = 1000
 TOLERANCE = 1e-6
 
 
-def generate_gmm_data(points, components, dimensions):
-    np.random.seed(10)
+def generate_gmm_data(points, components, dimensions, seed):
+    """Generates synthetic data of a given size from a random GMM"""
+    np.random.seed(seed)
 
     c_means = np.random.normal(size=[components, dimensions]) * 10
     c_variances = np.abs(np.random.normal(size=[components, dimensions]))
@@ -33,12 +34,8 @@ def generate_gmm_data(points, components, dimensions):
     return result, c_means, c_variances, c_weights
 
 
-def plot_raw_data(points):
-    plt.plot(points[:, 0], points[:, 1], "b.")
-    plt.show()
-
-
 def plot_fitted_data(points, c_means, c_variances):
+    """Plots the data and given Gaussian components"""
     plt.plot(points[:, 0], points[:, 1], "b.", zorder=0)
     plt.plot(c_means[:, 0], c_means[:, 1], "r.", zorder=1)
 
@@ -55,7 +52,7 @@ def plot_fitted_data(points, c_means, c_variances):
 # PREPARING DATA
 
 # generating DATA_POINTS points from a GMM with COMPONENTS components
-data, true_means, true_variances, true_weights = generate_gmm_data(DATA_POINTS, COMPONENTS, DIMENSIONS)
+data, true_means, true_variances, true_weights = generate_gmm_data(DATA_POINTS, COMPONENTS, DIMENSIONS, 10)
 
 
 # BUILDING COMPUTATIONAL GRAPH
@@ -130,8 +127,8 @@ previous_likelihood = -np.inf
 for step in range(TRAINING_STEPS):
     # executing a training step and
     # fetching evaluation information
-    current_likelihood, current_means, current_variances, _ = sess.run(
-        [mean_log_likelihood, means_, variances_, train_step],
+    current_likelihood, _ = sess.run(
+        [mean_log_likelihood, train_step],
         feed_dict={input: data}
     )
 
@@ -150,5 +147,8 @@ for step in range(TRAINING_STEPS):
 
     previous_likelihood = current_likelihood
 
-plot_raw_data(data)
-plot_fitted_data(data, current_means, current_variances)
+# fetching final values of the parameters
+final_means, final_variances = sess.run([means, variances])
+
+# plotting the obtained Gaussian components over the data
+plot_fitted_data(data, final_means, final_variances)

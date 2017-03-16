@@ -116,5 +116,4 @@ for step in range(TRAINING_STEPS):
 
     previous_assignments = current_assignments
 
-plot_raw_data(data)
 plot_clustered_data(data, current_means, current_assignments)
