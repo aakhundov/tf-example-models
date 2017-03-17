@@ -13,6 +13,7 @@ TOLERANCE = 0
 
 
 def generate_gmm_data(points, components, dimensions):
+    """Generates synthetic data of a given size from a random GMM"""
     np.random.seed(10)
 
     c_means = np.random.normal(size=[components, dimensions]) * 10
@@ -33,12 +34,8 @@ def generate_gmm_data(points, components, dimensions):
     return result, c_means, c_variances, c_weights
 
 
-def plot_raw_data(points):
-    plt.plot(points[:, 0], points[:, 1], "b.")
-    plt.show()
-
-
 def plot_clustered_data(points, c_means, c_assignments):
+    """Plots the cluster-colored data and the cluster means"""
     colors = cm.rainbow(np.linspace(0, 1, CLUSTERS))
 
     for cluster, color in zip(range(CLUSTERS), colors):
