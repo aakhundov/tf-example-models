@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
-import matplotlib.patches as pat
+
+import tf_gmm_tools
 
 
 DIMENSIONS = 2
@@ -12,48 +12,11 @@ TRAINING_STEPS = 1000
 TOLERANCE = 1e-6
 
 
-def generate_gmm_data(points, components, dimensions, seed):
-    """Generates synthetic data of a given size from a random GMM"""
-    np.random.seed(seed)
-
-    c_means = np.random.normal(size=[components, dimensions]) * 10
-    c_variances = np.abs(np.random.normal(size=[components, dimensions]))
-    c_weights = np.abs(np.random.normal(size=[components]))
-    c_weights /= np.sum(c_weights)
-
-    result = np.zeros((points, dimensions), dtype=np.float32)
-
-    for i in range(points):
-        comp = np.random.choice(np.array(range(10)), p=c_weights)
-        result[i] = np.random.multivariate_normal(
-            c_means[comp], np.diag(c_variances[comp])
-        )
-
-    np.random.seed()
-
-    return result, c_means, c_variances, c_weights
-
-
-def plot_fitted_data(points, c_means, c_variances):
-    """Plots the data and given Gaussian components"""
-    plt.plot(points[:, 0], points[:, 1], "b.", zorder=0)
-    plt.plot(c_means[:, 0], c_means[:, 1], "r.", zorder=1)
-
-    for i in range(c_means.shape[0]):
-        std = np.sqrt(c_variances[i])
-        plt.axes().add_artist(pat.Ellipse(
-            c_means[i], 2 * std[0], 2 * std[1],
-            fill=False, color="red", linewidth=2, zorder=1
-        ))
-
-    plt.show()
-
-
 # PREPARING DATA
 
 # generating DATA_POINTS points from a GMM with COMPONENTS components
-data, true_means, true_variances, true_weights = generate_gmm_data(DATA_POINTS, COMPONENTS, DIMENSIONS, 10)
-
+data, true_means, true_variances, true_weights, responsibilities = tf_gmm_tools.generate_gmm_data(
+    DATA_POINTS, COMPONENTS, DIMENSIONS, seed=10, diagonal=True)
 
 # BUILDING COMPUTATIONAL GRAPH
 
@@ -70,10 +33,15 @@ dim_means = tf.reduce_mean(input, 0)
 dim_distances = tf.squared_difference(input, tf.expand_dims(dim_means, 0))
 dim_variances = tf.reduce_sum(dim_distances, 0) / tf.cast(tf.shape(input)[0], tf.float64)
 avg_variance = tf.cast(tf.reduce_sum(dim_variances) / COMPONENTS / DIMENSIONS, tf.float64)
-rand_point_ids = tf.squeeze(tf.multinomial(tf.ones([1, tf.shape(input)[0]]), COMPONENTS))
+
+# default initial values of the variables
+initial_means = tf.placeholder_with_default(
+    tf.gather(input, tf.squeeze(tf.multinomial(tf.ones([1, tf.shape(input)[0]]), COMPONENTS))),
+    shape=[COMPONENTS, DIMENSIONS]
+)
 
 # trainable variables: component means, variances, and weights
-means = tf.Variable(tf.gather(input, rand_point_ids), dtype=tf.float64)
+means = tf.Variable(initial_means, dtype=tf.float64)
 variances = tf.Variable(tf.cast(tf.ones([COMPONENTS, DIMENSIONS]), tf.float64) * avg_variance)
 weights = tf.Variable(tf.cast(tf.fill([COMPONENTS], 1. / COMPONENTS), tf.float64))
 
@@ -119,7 +87,13 @@ train_step = tf.group(
 sess = tf.InteractiveSession()
 
 # initializing trainable variables
-sess.run(tf.global_variables_initializer(), feed_dict={input: data})
+sess.run(
+    tf.global_variables_initializer(),
+    feed_dict={
+        input: data,
+        initial_means: true_means
+    }
+)
 
 previous_likelihood = -np.inf
 
@@ -152,4 +126,4 @@ final_means = means.eval(sess)
 final_variances = variances.eval(sess)
 
 # plotting the obtained Gaussian components over the data
-plot_fitted_data(data, final_means, final_variances)
+tf_gmm_tools.plot_fitted_data(data, final_means, final_variances, true_means, true_variances)
