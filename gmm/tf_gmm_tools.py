@@ -5,7 +5,7 @@ import matplotlib.patches as pat
 
 def _generate_covariances(components, dimensions, diagonal=False):
     """Generates a batch of random positive definite covariance matrices"""
-    covariances = np.empty((components, dimensions, dimensions))
+    covariances = np.zeros((components, dimensions, dimensions))
 
     if diagonal:
         for i in range(components):
