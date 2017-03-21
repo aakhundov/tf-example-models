@@ -18,6 +18,7 @@ TOLERANCE = 1e-6
 data, true_means, true_variances, true_weights, responsibilities = tf_gmm_tools.generate_gmm_data(
     DATA_POINTS, COMPONENTS, DIMENSIONS, seed=10, diagonal=True)
 
+
 # BUILDING COMPUTATIONAL GRAPH
 
 # model inputs: data points (images)
