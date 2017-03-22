@@ -6,3 +6,5 @@ TensorFlow-based implementation of several machine learning models (first three 
 - Convolutional Neural Network (tf_cnn.py)
 - K-Means Clustering (tf_kmeans.py)
 - Gaussian Mixture Model (tf_gmm.py)
+
+"gmm" folder contains various implementations (diagonal covariance, full covariance, gradient-based) of a Gaussian Mixture Model in TensorFlow.
