@@ -76,12 +76,9 @@ variances_ = tf.reduce_sum(sq_dist_matrix * tf.expand_dims(tf.expand_dims(gamma_
 weights_ = gamma_sum / tf.cast(tf.shape(input)[0], tf.float64)
 
 # applying prior to the computed variances
-# variances_ *= tf.expand_dims(tf.expand_dims(gamma_sum, 1), 2)
-# variances_ += (2.0 * beta)
-# variances_ /= tf.expand_dims(tf.expand_dims(gamma_sum + (2.0 * (alpha + 1.0)), 1), 2)
-# variances_ *= tf.expand_dims(gamma_sum, 1)
-# variances_ += (2.0 * beta)
-# variances_ /= tf.expand_dims(gamma_sum + (2.0 * (alpha + 1.0)), 1)
+variances_ *= tf.expand_dims(tf.expand_dims(gamma_sum, 1), 2)
+variances_ += tf.expand_dims(tf.diag(tf.fill([DIMENSIONS], 2.0 * beta)), 0)
+variances_ /= tf.expand_dims(tf.expand_dims(gamma_sum + (2.0 * (alpha + 1.0)), 1), 2)
 
 # log-likelihood: objective function being maximized up to a TOLERANCE delta
 log_likelihood = tf.reduce_sum(tf.log(exp_log_shifted_sum)) + tf.reduce_sum(log_shift)
@@ -105,7 +102,7 @@ sess.run(
     tf.global_variables_initializer(),
     feed_dict={
         input: data,
-        initial_means: true_means,
+        initial_means: data[:10],
         # initial_variances: true_variances,
         # initial_weights: true_weights
     }
@@ -144,4 +141,5 @@ final_variances = variances.eval(sess)
 # plotting data and the obtained GMM
 tf_gmm_tools.plot_fitted_data(
     data, final_means, final_variances,
-    true_means, true_variances)
+    true_means, true_variances
+)

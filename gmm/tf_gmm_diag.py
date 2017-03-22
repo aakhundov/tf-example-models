@@ -74,9 +74,9 @@ variances_ = tf.reduce_sum(distances_ * tf.expand_dims(gamma_weighted, 2), 1)
 weights_ = gamma_sum / tf.cast(tf.shape(input)[0], tf.float64)
 
 # applying prior to the computed variances
-# variances_ *= tf.expand_dims(gamma_sum, 1)
-# variances_ += (2.0 * beta)
-# variances_ /= tf.expand_dims(gamma_sum + (2.0 * (alpha + 1.0)), 1)
+variances_ *= tf.expand_dims(gamma_sum, 1)
+variances_ += (2.0 * beta)
+variances_ /= tf.expand_dims(gamma_sum + (2.0 * (alpha + 1.0)), 1)
 
 # log-likelihood: objective function being maximized up to a TOLERANCE delta
 log_likelihood = tf.reduce_sum(tf.log(exp_log_shifted_sum)) + tf.reduce_sum(log_shift)
@@ -100,7 +100,7 @@ sess.run(
     tf.global_variables_initializer(),
     feed_dict={
         input: data,
-        initial_means: true_means,
+        initial_means: data[:10],
         # initial_variances: true_variances,
         # initial_weights: true_weights
     }
@@ -119,7 +119,7 @@ for step in range(TRAINING_STEPS):
 
     if step > 0:
         # computing difference between consecutive log-likelihoods
-        difference = np.abs(current_likelihood - previous_likelihood)
+        difference = current_likelihood - previous_likelihood
         print("{0}:\tmean-likelihood {1:.8f}\tdifference {2}".format(
             step, current_likelihood, difference))
 
@@ -139,4 +139,5 @@ final_variances = variances.eval(sess)
 # plotting data and the obtained GMM
 tf_gmm_tools.plot_fitted_data(
     data, final_means, final_variances,
-    true_means, true_variances)
+    true_means, true_variances
+)
