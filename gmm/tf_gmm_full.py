@@ -45,7 +45,7 @@ initial_covariances = tf.placeholder_with_default(
     shape=[COMPONENTS, DIMENSIONS, DIMENSIONS]
 )
 initial_weights = tf.placeholder_with_default(
-    tf.cast(tf.fill([COMPONENTS], 1.0 / COMPONENTS), tf.float64),
+    tf.cast(tf.constant(1.0 / COMPONENTS, shape=[COMPONENTS]), tf.float64),
     shape=[COMPONENTS]
 )
 
@@ -77,7 +77,7 @@ weights_ = gamma_sum / tf.cast(tf.shape(input)[0], tf.float64)
 
 # applying prior to the computed covariances
 covariances_ *= tf.expand_dims(tf.expand_dims(gamma_sum, 1), 2)
-covariances_ += tf.expand_dims(tf.diag(tf.fill([DIMENSIONS], 2.0 * beta)), 0)
+covariances_ += tf.expand_dims(tf.diag(tf.constant(2.0 * beta, shape=[DIMENSIONS])), 0)
 covariances_ /= tf.expand_dims(tf.expand_dims(gamma_sum + (2.0 * (alpha + 1.0)), 1), 2)
 
 # log-likelihood: objective function being maximized up to a TOLERANCE delta

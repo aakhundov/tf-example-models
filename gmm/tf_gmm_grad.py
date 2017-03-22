@@ -44,7 +44,7 @@ initial_covariances = tf.placeholder_with_default(
     shape=[COMPONENTS, DIMENSIONS]
 )
 initial_weights = tf.placeholder_with_default(
-    tf.cast(tf.fill([COMPONENTS], 1.0 / COMPONENTS), tf.float64),
+    tf.cast(tf.constant(1.0 / COMPONENTS, shape=[COMPONENTS]), tf.float64),
     shape=[COMPONENTS]
 )
 
