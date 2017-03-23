@@ -127,8 +127,8 @@ with tf.Session() as sess:
     final_means = means.eval(sess)
     final_covariances = covariances.eval(sess)
 
-# plotting data and the obtained GMM
+# plotting the first two dimensions of data and the obtained GMM
 tf_gmm_tools.plot_fitted_data(
-    data, final_means, final_covariances,
-    true_means, true_covariances
+    data[:, :2], final_means[:, :2], final_covariances[:, :2],
+    true_means[:, :2], true_covariances[:, :2, :2]
 )

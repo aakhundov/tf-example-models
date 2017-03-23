@@ -65,13 +65,13 @@ def _plot_gaussian(mean, covariance, color, zorder=0):
     ))
 
 
-def plot_fitted_data(data, means, covariances, true_means=None, true_variances=None):
+def plot_fitted_data(data, means, covariances, true_means=None, true_covariances=None):
     """Plots the data and given Gaussian components"""
     plt.plot(data[:, 0], data[:, 1], "b.", markersize=0.5, zorder=0)
 
     if true_means is not None:
         for i in range(len(true_means)):
-            _plot_gaussian(true_means[i], true_variances[i], "green", 1)
+            _plot_gaussian(true_means[i], true_covariances[i], "green", 1)
 
     for i in range(len(means)):
         _plot_gaussian(means[i], covariances[i], "red", 2)
