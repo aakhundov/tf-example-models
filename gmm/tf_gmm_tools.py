@@ -3,29 +3,30 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as pat
 
 
-def _generate_covariances(components, dimensions, diagonal=False):
+def _generate_covariances(components, dimensions, diagonal=False, isotropic=False):
     """Generates a batch of random positive definite covariance matrices"""
     covariances = np.zeros((components, dimensions, dimensions))
 
-    if diagonal:
+    if isotropic:
+        for i in range(components):
+            covariances[i] = np.diag(np.full((dimensions,), np.abs(np.random.normal())))
+    elif diagonal:
         for i in range(components):
             covariances[i] = np.diag(np.abs(np.random.normal(size=[dimensions])))
     else:
         for i in range(components):
-            while np.any(np.linalg.eigvals(covariances[i]) <= 0):
-                covariances[i] = np.random.normal(size=[dimensions, dimensions])
-                np.fill_diagonal(covariances[i], np.abs(np.diag(covariances[i])))
-                covariances[i] = (covariances[i] + covariances[i].T) / 2.0
+            covariances[i] = np.random.normal(size=[dimensions, dimensions])
+            covariances[i] = np.dot(covariances[i], covariances[i].T)
 
     return covariances
 
 
-def generate_gmm_data(size, components, dimensions, seed, diagonal=False):
+def generate_gmm_data(size, components, dimensions, seed, diagonal=False, isotropic=False):
     """Generates synthetic data of a given size from a random GMM"""
     np.random.seed(seed)
 
     means = np.random.normal(size=[components, dimensions]) * 10
-    covariances = _generate_covariances(components, dimensions, diagonal)
+    covariances = _generate_covariances(components, dimensions, diagonal, isotropic)
     weights = np.abs(np.random.normal(size=[components]))
     weights /= np.sum(weights)
 
