@@ -4,6 +4,67 @@ import tensorflow as tf
 import tf_gmm_tools
 
 
+class IsotropicCovariance:
+
+    def __init__(self, dims, initial=None, alpha=None, beta=None):
+        self.dims = dims
+        self.initial = initial
+        self.alpha = alpha
+        self.beta = beta
+
+        self._variance_scalar = None
+        self._prior = None
+        self._alpha = None
+        self._beta = None
+        self._dims = None
+
+    def initialize(self, dtype=tf.float64):
+        if self._variance_scalar is None:
+            if self.initial is not None:
+                self._variance_scalar = tf.Variable(self.initial, dtype=dtype)
+            else:
+                self._variance_scalar = tf.Variable(1.0, dtype=dtype)
+
+        if self._prior is None:
+            if self.alpha is not None and self.beta is not None:
+                self._prior = True
+                self._alpha = tf.constant(self.alpha, dtype=dtype)
+                self._beta = tf.constant(self.beta, dtype=dtype)
+            else:
+                self._prior = False
+
+        self._dims = tf.constant(self.dims, dtype=dtype)
+
+    def get_matrix(self):
+        return tf.diag(tf.fill([self.dims], self._variance_scalar))
+
+    def get_quadratic_form(self, data, mean):
+        sq_distances = tf.squared_difference(data, tf.expand_dims(mean, 0))
+        sum_sq_distances = tf.reduce_sum(sq_distances, 1)
+
+        return sum_sq_distances / self._variance_scalar
+
+    def get_log_determinant(self):
+        return self._dims * tf.log(self._variance_scalar)
+
+    def get_prior_adjustment(self, variance, gamma_sum):
+        adjusted_variance = variance
+        adjusted_variance *= gamma_sum
+        adjusted_variance += (2.0 * self._beta)
+        adjusted_variance /= gamma_sum + (2.0 * (self._alpha + 1.0))
+
+        return adjusted_variance
+
+    def get_value_updater(self, data, new_mean, gamma_sum, gamma_weighted):
+        new_sq_distances = tf.squared_difference(data, tf.expand_dims(new_mean, 0))
+        new_variance = tf.reduce_sum(new_sq_distances * tf.expand_dims(gamma_weighted, 1)) / self._dims
+
+        if self._prior:
+            new_variance = self.get_prior_adjustment(new_variance, gamma_sum)
+
+        return self._variance_scalar.assign(new_variance)
+
+
 class DiagonalCovariance:
 
     def __init__(self, dims, initial=None, alpha=None, beta=None):
@@ -79,7 +140,7 @@ class FullCovariance:
             if self.initial is not None:
                 self._covariance_matrix = tf.Variable(self.initial, dtype=dtype)
             else:
-                self._covariance_matrix = tf.Variable(tf.cast(tf.fill([self.dims, self.dims], 1.0), dtype))
+                self._covariance_matrix = tf.Variable(tf.diag(tf.cast(tf.fill([self.dims], 1.0), dtype)))
 
         if self._prior is None:
             if self.alpha is not None and self.beta is not None:
@@ -181,6 +242,9 @@ class MixtureModel:
 
         self._op_component_parameters = None
 
+        self._dims = tf.constant(self.dims, dtype=dtype)
+        self._num_points = tf.constant(self.num_points, dtype=dtype)
+
         self._initialize(dtype)
 
     def _initialize(self, dtype=tf.float64):
@@ -204,7 +268,7 @@ class MixtureModel:
         self._gamma_weighted = self._gamma / tf.expand_dims(self._gamma_sum, 1)
 
         self._log_likelihood = tf.reduce_sum(tf.log(self._exp_log_shifted_sum)) + tf.reduce_sum(self._log_shift)
-        self._mean_log_likelihood = self._log_likelihood / tf.cast(self.num_points * self.dims, dtype)
+        self._mean_log_likelihood = self._log_likelihood / (self._num_points * self._dims)
 
         self._gamma_sum_split = tf.unstack(self._gamma_sum)
         self._gamma_weighted_split = tf.unstack(self._gamma_weighted)
@@ -221,7 +285,7 @@ class MixtureModel:
                     )
                 )
 
-        self._new_weights = self._gamma_sum / tf.cast(self.num_points, dtype)
+        self._new_weights = self._gamma_sum / self._num_points
         self._update_ops = self._component_updaters + [self._weights.assign(self._new_weights)]
         self._train_step = tf.group(*self._update_ops)
 
@@ -237,28 +301,21 @@ class MixtureModel:
 
             previous_log_likelihood = -np.inf
 
-            # training loop
             for step in range(max_steps):
-                # executing a training step and
-                # fetching evaluation information
                 _, current_log_likelihood = sess.run([
                     self._train_step,
                     self._mean_log_likelihood
                 ])
 
                 if step > 0:
-                    # computing difference between consecutive log-likelihoods
                     difference = current_log_likelihood - previous_log_likelihood
 
                     if feedback is not None:
-                        # feeding back current log-likelihood and difference
                         feedback(step, current_log_likelihood, difference)
 
-                    # stopping if TOLERANCE was reached
                     if difference <= tolerance:
                         break
                 elif feedback is not None:
-                    # feeding back initial log-likelihood
                     feedback(step, current_log_likelihood, None)
 
                 previous_log_likelihood = current_log_likelihood
@@ -300,9 +357,14 @@ for c in range(COMPONENTS):
         GaussianDistribution(
             dims=DIMENSIONS,
             mean=synthetic_data[c],
+            # covariance=IsotropicCovariance(
+            #     DIMENSIONS,
+            #     initial=avg_data_variance,
+            #     alpha=1.0, beta=1.0
+            # )
             # covariance=DiagonalCovariance(
             #     DIMENSIONS,
-            #     variance=np.full((DIMENSIONS,), avg_data_variance),
+            #     initial=np.full((DIMENSIONS,), avg_data_variance),
             #     alpha=1.0, beta=1.0),
             covariance=FullCovariance(
                 DIMENSIONS,
