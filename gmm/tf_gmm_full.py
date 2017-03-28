@@ -9,14 +9,14 @@ COMPONENTS = 10
 NUM_POINTS = 10000
 
 TRAINING_STEPS = 1000
-TOLERANCE = 1e-6
+TOLERANCE = 10e-6
 
 
 # PREPARING DATA
 
 # generating DATA_POINTS points from a GMM with COMPONENTS components
 data, true_means, true_covariances, true_weights, responsibilities = tf_gmm_tools.generate_gmm_data(
-    NUM_POINTS, COMPONENTS, DIMENSIONS, seed=20, diagonal=False)
+    NUM_POINTS, COMPONENTS, DIMENSIONS, seed=10, diagonal=False)
 
 
 # BUILDING COMPUTATIONAL GRAPH
