@@ -6,23 +6,23 @@ import tf_gmm_tools
 
 class DiagonalCovariance:
 
-    def __init__(self, dims, variance=None, alpha=None, beta=None):
+    def __init__(self, dims, initial=None, alpha=None, beta=None):
         self.dims = dims
-        self.variance = variance
+        self.initial = initial
         self.alpha = alpha
         self.beta = beta
 
-        self._variance = None
+        self._variance_vector = None
         self._prior = None
         self._alpha = None
         self._beta = None
 
     def initialize(self, dtype=tf.float64):
-        if self._variance is None:
-            if self.variance is not None:
-                self._variance = tf.Variable(self.variance, dtype=dtype)
+        if self._variance_vector is None:
+            if self.initial is not None:
+                self._variance_vector = tf.Variable(self.initial, dtype=dtype)
             else:
-                self._variance = tf.Variable(tf.cast(tf.fill([self.dims], 1.0), dtype))
+                self._variance_vector = tf.Variable(tf.cast(tf.fill([self.dims], 1.0), dtype))
 
         if self._prior is None:
             if self.alpha is not None and self.beta is not None:
@@ -33,15 +33,15 @@ class DiagonalCovariance:
                 self._prior = False
 
     def get_matrix(self):
-        return tf.diag(self._variance)
+        return tf.diag(self._variance_vector)
 
     def get_quadratic_form(self, data, mean):
         sq_distances = tf.squared_difference(data, tf.expand_dims(mean, 0))
 
-        return tf.reduce_sum(sq_distances / self._variance, 1)
+        return tf.reduce_sum(sq_distances / self._variance_vector, 1)
 
     def get_log_determinant(self):
-        return tf.reduce_sum(tf.log(self._variance))
+        return tf.reduce_sum(tf.log(self._variance_vector))
 
     def get_prior_adjustment(self, variance, gamma_sum):
         adjusted_variance = variance
@@ -58,7 +58,66 @@ class DiagonalCovariance:
         if self._prior:
             new_variance = self.get_prior_adjustment(new_variance, gamma_sum)
 
-        return self._variance.assign(new_variance)
+        return self._variance_vector.assign(new_variance)
+
+
+class FullCovariance:
+
+    def __init__(self, dims, initial=None, alpha=None, beta=None):
+        self.dims = dims
+        self.initial = initial
+        self.alpha = alpha
+        self.beta = beta
+
+        self._covariance_matrix = None
+        self._prior = None
+        self._alpha = None
+        self._beta = None
+
+    def initialize(self, dtype=tf.float64):
+        if self._covariance_matrix is None:
+            if self.initial is not None:
+                self._covariance_matrix = tf.Variable(self.initial, dtype=dtype)
+            else:
+                self._covariance_matrix = tf.Variable(tf.cast(tf.fill([self.dims, self.dims], 1.0), dtype))
+
+        if self._prior is None:
+            if self.alpha is not None and self.beta is not None:
+                self._prior = True
+                self._alpha = tf.constant(self.alpha, dtype=dtype)
+                self._beta = tf.constant(self.beta, dtype=dtype)
+            else:
+                self._prior = False
+
+    def get_matrix(self):
+        return self._covariance_matrix
+
+    def get_quadratic_form(self, data, mean):
+        differences = tf.subtract(data, tf.expand_dims(mean, 0))
+        diff_times_inv_cov = tf.matmul(differences, tf.matrix_inverse(self._covariance_matrix))
+
+        return tf.reduce_sum(diff_times_inv_cov * differences, 1)
+
+    def get_log_determinant(self):
+        return tf.log(tf.matrix_determinant(self._covariance_matrix))
+
+    def get_prior_adjustment(self, covariance, gamma_sum):
+        adjusted_covariance = covariance
+        adjusted_covariance *= gamma_sum
+        adjusted_covariance += tf.diag(tf.fill([DIMENSIONS], 2.0 * self._beta))
+        adjusted_covariance /= gamma_sum + (2.0 * (self._alpha + 1.0))
+
+        return adjusted_covariance
+
+    def get_value_updater(self, data, new_mean, gamma_sum, gamma_weighted):
+        new_differences = tf.subtract(data, tf.expand_dims(new_mean, 0))
+        sq_dist_matrix = tf.matmul(tf.expand_dims(new_differences, 2), tf.expand_dims(new_differences, 1))
+        new_covariance = tf.reduce_sum(sq_dist_matrix * tf.expand_dims(tf.expand_dims(gamma_weighted, 1), 2), 0)
+
+        if self._prior:
+            new_covariance = self.get_prior_adjustment(new_covariance, gamma_sum)
+
+        return self._covariance_matrix.assign(new_covariance)
 
 
 class GaussianDistribution:
@@ -229,22 +288,26 @@ TOLERANCE = 10e-6
 
 print("Generating data...")
 synthetic_data, true_means, true_covariances, true_weights, responsibilities = tf_gmm_tools.generate_gmm_data(
-    NUM_POINTS, COMPONENTS, DIMENSIONS, seed=10, diagonal=True)
+    NUM_POINTS, COMPONENTS, DIMENSIONS, seed=10, diagonal=False)
 
-print("Computing avg covariance...")
-avg_variance = np.var(synthetic_data, axis=0).sum() / COMPONENTS / DIMENSIONS
+print("Computing avg. covariance...")
+avg_data_variance = np.var(synthetic_data, axis=0).sum() / COMPONENTS / DIMENSIONS
 
 print("Initializing components...")
 mixture_components = []
 for c in range(COMPONENTS):
     mixture_components.append(
         GaussianDistribution(
-            DIMENSIONS, synthetic_data[c],
-            DiagonalCovariance(
+            dims=DIMENSIONS,
+            mean=synthetic_data[c],
+            # covariance=DiagonalCovariance(
+            #     DIMENSIONS,
+            #     variance=np.full((DIMENSIONS,), avg_data_variance),
+            #     alpha=1.0, beta=1.0),
+            covariance=FullCovariance(
                 DIMENSIONS,
-                variance=np.full((DIMENSIONS,), avg_variance),
-                alpha=1.0, beta=1.0
-            )
+                initial=np.diag(np.full((DIMENSIONS,), avg_data_variance)),
+                alpha=1.0, beta=1.0),
         )
     )
 
