@@ -232,72 +232,90 @@ class GaussianDistribution:
 
 class MixtureModel:
 
-    def __init__(self, data, components, dtype=tf.float64):
+    def __init__(self, data, components, cluster=None, dtype=tf.float64):
         self.data = data
         self.dims = data.shape[1]
         self.num_points = data.shape[0]
         self.components = components
 
-        self._weights = tf.Variable(tf.cast(tf.fill([len(components)], 1.0 / len(components)), dtype))
+        self._initialize_workers(cluster)
+        self._initialize_graph(dtype)
 
-        self._op_component_parameters = None
+    def _initialize_workers(self, cluster):
+        if cluster is None:
+            self.master_host = ""
+            self.workers = [None]
+        else:
+            self.master_host = "grpc://" + cluster.job_tasks("master")[0]
+            self.workers = ["/job:worker/task:" + str(i) for i in range(cluster.num_tasks("worker"))]
 
-        self._dims = tf.constant(self.dims, dtype=dtype)
-        self._num_points = tf.constant(self.num_points, dtype=dtype)
+    def _initialize_graph(self, dtype=tf.float64):
+        self.graph = tf.Graph()
 
-        self._initialize(dtype)
+        with self.graph.as_default():
+            self._dims = tf.constant(self.dims, dtype=dtype)
+            self._num_points = tf.constant(self.num_points, dtype=dtype)
+            self._input = tf.placeholder(dtype, shape=[self.num_points, self.dims])
 
-    def _initialize(self, dtype=tf.float64):
-        self._component_data = []
-        self._component_probabilities = []
+            self._weights = tf.Variable(tf.cast(tf.fill([len(self.components)], 1.0 / len(self.components)), dtype))
 
-        for comp in self.components:
-            with tf.device("/cpu:0"):
-                comp.initialize(dtype)
-                self._component_data.append(tf.Variable(self.data, trainable=False, dtype=dtype))
-                self._component_probabilities.extend([comp.get_log_probabilities(self._component_data[-1])])
-
-        self._log_components = tf.stack(self._component_probabilities)
-        self._log_weighted = self._log_components + tf.expand_dims(tf.log(self._weights), 1)
-        self._log_shift = tf.expand_dims(tf.reduce_max(self._log_weighted, 0), 0)
-        self._exp_log_shifted = tf.exp(self._log_weighted - self._log_shift)
-        self._exp_log_shifted_sum = tf.reduce_sum(self._exp_log_shifted, 0)
-
-        self._gamma = self._exp_log_shifted / self._exp_log_shifted_sum
-        self._gamma_sum = tf.reduce_sum(self._gamma, 1)
-        self._gamma_weighted = self._gamma / tf.expand_dims(self._gamma_sum, 1)
-
-        self._log_likelihood = tf.reduce_sum(tf.log(self._exp_log_shifted_sum)) + tf.reduce_sum(self._log_shift)
-        self._mean_log_likelihood = self._log_likelihood / (self._num_points * self._dims)
-
-        self._gamma_sum_split = tf.unstack(self._gamma_sum)
-        self._gamma_weighted_split = tf.unstack(self._gamma_weighted)
-
-        self._component_updaters = []
-
-        for i in range(len(self.components)):
-            with tf.device("/cpu:0"):
-                self._component_updaters.extend(
-                    self.components[i].get_parameter_updaters(
-                        self._component_data[i],
-                        self._gamma_sum_split[i],
-                        self._gamma_weighted_split[i]
+            self._worker_data = []
+            for w in self.workers:
+                with tf.device(w):
+                    self._worker_data.append(
+                        tf.Variable(self._input, trainable=False, dtype=dtype)
                     )
-                )
 
-        self._new_weights = self._gamma_sum / self._num_points
-        self._update_ops = self._component_updaters + [self._weights.assign(self._new_weights)]
-        self._train_step = tf.group(*self._update_ops)
+            self._component_log_probabilities = []
+            for i in range(len(self.components)):
+                component = self.components[i]
+                worker_id = i % len(self.workers)
+                with tf.device(self.workers[worker_id]):
+                    component.initialize(dtype)
+                    self._component_log_probabilities.append(
+                        component.get_log_probabilities(self._worker_data[worker_id])
+                    )
 
-    def _get_component_parameters(self):
-        if self._op_component_parameters is None:
-            self._op_component_parameters = [comp.get_parameters() for comp in self.components]
+            self._log_components = tf.stack(self._component_log_probabilities)
+            self._log_weighted = self._log_components + tf.expand_dims(tf.log(self._weights), 1)
+            self._log_shift = tf.expand_dims(tf.reduce_max(self._log_weighted, 0), 0)
+            self._exp_log_shifted = tf.exp(self._log_weighted - self._log_shift)
+            self._exp_log_shifted_sum = tf.reduce_sum(self._exp_log_shifted, 0)
+            self._log_likelihood = tf.reduce_sum(tf.log(self._exp_log_shifted_sum)) + tf.reduce_sum(self._log_shift)
+            self._mean_log_likelihood = self._log_likelihood / (self._num_points * self._dims)
 
-        return self._op_component_parameters
+            self._gamma = self._exp_log_shifted / self._exp_log_shifted_sum
+            self._gamma_sum = tf.reduce_sum(self._gamma, 1)
+            self._gamma_weighted = self._gamma / tf.expand_dims(self._gamma_sum, 1)
+            self._gamma_sum_split = tf.unstack(self._gamma_sum)
+            self._gamma_weighted_split = tf.unstack(self._gamma_weighted)
+
+            self._component_updaters = []
+            for i in range(len(self.components)):
+                component = self.components[i]
+                worker_id = i % len(self.workers)
+                with tf.device(self.workers[worker_id]):
+                    self._component_updaters.extend(
+                        component.get_parameter_updaters(
+                            self._worker_data[worker_id],
+                            self._gamma_sum_split[i],
+                            self._gamma_weighted_split[i]
+                        )
+                    )
+
+            self._new_weights = self._gamma_sum / self._num_points
+            self._weights_updater = self._weights.assign(self._new_weights)
+            self._all_updaters = self._component_updaters + [self._weights_updater]
+            self._train_step = tf.group(*self._all_updaters)
+
+            self._component_parameters = [comp.get_parameters() for comp in self.components]
 
     def train(self, tolerance=10e-6, max_steps=1000, feedback=None):
-        with tf.Session() as sess:
-            sess.run(tf.global_variables_initializer())
+        with tf.Session(target=self.master_host, graph=self.graph) as sess:
+            sess.run(
+                tf.global_variables_initializer(),
+                feed_dict={self._input: self.data}
+            )
 
             previous_log_likelihood = -np.inf
 
@@ -315,15 +333,16 @@ class MixtureModel:
 
                     if difference <= tolerance:
                         break
-                elif feedback is not None:
-                    feedback(step, current_log_likelihood, None)
+                else:
+                    if feedback is not None:
+                        feedback(step, current_log_likelihood, None)
 
                 previous_log_likelihood = current_log_likelihood
 
-            output = [self._mean_log_likelihood, self._weights,
-                      self._get_component_parameters()]
-
-            return sess.run(output)
+            return sess.run([
+                self._mean_log_likelihood,
+                self._weights, self._component_parameters
+            ])
 
 
 def feedback_sub(step, current_log_likelihood, difference):
@@ -361,17 +380,24 @@ for c in range(COMPONENTS):
             #     DIMENSIONS,
             #     initial=avg_data_variance,
             #     alpha=1.0, beta=1.0
-            # )
+            # ),
             # covariance=DiagonalCovariance(
             #     DIMENSIONS,
             #     initial=np.full((DIMENSIONS,), avg_data_variance),
-            #     alpha=1.0, beta=1.0),
+            #     alpha=1.0, beta=1.0
+            # ),
             covariance=FullCovariance(
                 DIMENSIONS,
                 initial=np.diag(np.full((DIMENSIONS,), avg_data_variance)),
-                alpha=1.0, beta=1.0),
+                alpha=1.0, beta=1.0
+            ),
         )
     )
+
+cluster_spec = tf.train.ClusterSpec({
+    "master": ["localhost:2222"],
+    "worker": ["localhost:2223", "localhost:2224"]
+})
 
 print("Initializing model...")
 gmm = MixtureModel(synthetic_data, mixture_components)
