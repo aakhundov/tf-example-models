@@ -55,7 +55,7 @@ class IsotropicCovariance:
 
         return adjusted_variance
 
-    def get_value_updater(self, data, new_mean, gamma_sum, gamma_weighted):
+    def get_value_updater(self, data, new_mean, gamma_weighted, gamma_sum):
         new_sq_distances = tf.squared_difference(data, tf.expand_dims(new_mean, 0))
         new_variance = tf.reduce_sum(new_sq_distances * tf.expand_dims(gamma_weighted, 1)) / self._dims
 
@@ -112,7 +112,7 @@ class DiagonalCovariance:
 
         return adjusted_variance
 
-    def get_value_updater(self, data, new_mean, gamma_sum, gamma_weighted):
+    def get_value_updater(self, data, new_mean, gamma_weighted, gamma_sum):
         new_sq_distances = tf.squared_difference(data, tf.expand_dims(new_mean, 0))
         new_variance = tf.reduce_sum(new_sq_distances * tf.expand_dims(gamma_weighted, 1), 0)
 
@@ -165,12 +165,12 @@ class FullCovariance:
     def get_prior_adjustment(self, covariance, gamma_sum):
         adjusted_covariance = covariance
         adjusted_covariance *= gamma_sum
-        adjusted_covariance += tf.diag(tf.fill([DIMENSIONS], 2.0 * self._beta))
+        adjusted_covariance += tf.diag(tf.fill([self.dims], 2.0 * self._beta))
         adjusted_covariance /= gamma_sum + (2.0 * (self._alpha + 1.0))
 
         return adjusted_covariance
 
-    def get_value_updater(self, data, new_mean, gamma_sum, gamma_weighted):
+    def get_value_updater(self, data, new_mean, gamma_weighted, gamma_sum):
         new_differences = tf.subtract(data, tf.expand_dims(new_mean, 0))
         sq_dist_matrix = tf.matmul(tf.expand_dims(new_differences, 2), tf.expand_dims(new_differences, 1))
         new_covariance = tf.reduce_sum(sq_dist_matrix * tf.expand_dims(tf.expand_dims(gamma_weighted, 1), 2), 0)
@@ -222,12 +222,56 @@ class GaussianDistribution:
 
         return -0.5 * (log_coefficient + quadratic_form)
 
-    def get_parameter_updaters(self, data, gamma_sum, gamma_weighted):
+    def get_parameter_updaters(self, data, gamma_weighted, gamma_sum):
         new_mean = tf.reduce_sum(data * tf.expand_dims(gamma_weighted, 1), 0)
         covariance_updater = self._covariance.get_value_updater(
-            data, new_mean, gamma_sum, gamma_weighted)
+            data, new_mean, gamma_weighted, gamma_sum)
 
         return [covariance_updater, self._mean.assign(new_mean)]
+
+
+class CategoricalDistribution:
+
+    def __init__(self, counts, means=None):
+        self.dims = len(counts)
+        self.counts = counts
+        self.means = means
+
+        self._means = None
+
+    def initialize(self, dtype=tf.float64):
+        if self._means is None:
+            self._means = []
+            for dim in range(self.dims):
+                if self.means is not None:
+                    mean = tf.Variable(self.means[dim], dtype=dtype)
+                else:
+                    rand = tf.random_uniform([self.counts[dim]], minval=0.25, maxval=0.75, dtype=dtype)
+                    mean = tf.Variable(rand / tf.reduce_sum(rand))
+                self._means.append(mean)
+
+    def get_parameters(self):
+        return self._means
+
+    def get_log_probabilities(self, data):
+        log_probabilities = []
+        for dim in range(self.dims):
+            log_probabilities.append(
+                tf.gather(tf.log(self._means[dim]), data[:, dim])
+            )
+
+        stacked = tf.parallel_stack(log_probabilities)
+
+        return tf.reduce_sum(stacked, axis=0)
+
+    def get_parameter_updaters(self, data, gamma_weighted, gamma_sum):
+        parameter_updaters = []
+        for dim in range(self.dims):
+            partition = tf.dynamic_partition(gamma_weighted, data[:, dim], self.counts[dim])
+            new_mean = tf.parallel_stack([tf.reduce_sum(p) for p in partition])
+            parameter_updaters.append(self._means[dim].assign(new_mean))
+
+        return parameter_updaters
 
 
 class MixtureModel:
@@ -255,7 +299,7 @@ class MixtureModel:
         with self.graph.as_default():
             self._dims = tf.constant(self.dims, dtype=dtype)
             self._num_points = tf.constant(self.num_points, dtype=dtype)
-            self._input = tf.placeholder(dtype, shape=[self.num_points, self.dims])
+            self._input = tf.placeholder(self.data.dtype, shape=[self.num_points, self.dims])
 
             self._weights = tf.Variable(tf.cast(tf.fill([len(self.components)], 1.0 / len(self.components)), dtype))
 
@@ -263,7 +307,7 @@ class MixtureModel:
             for w in self.workers:
                 with tf.device(w):
                     self._worker_data.append(
-                        tf.Variable(self._input, trainable=False, dtype=dtype)
+                        tf.Variable(self._input, trainable=False)
                     )
 
             self._component_log_probabilities = []
@@ -276,7 +320,7 @@ class MixtureModel:
                         component.get_log_probabilities(self._worker_data[worker_id])
                     )
 
-            self._log_components = tf.stack(self._component_log_probabilities)
+            self._log_components = tf.parallel_stack(self._component_log_probabilities)
             self._log_weighted = self._log_components + tf.expand_dims(tf.log(self._weights), 1)
             self._log_shift = tf.expand_dims(tf.reduce_max(self._log_weighted, 0), 0)
             self._exp_log_shifted = tf.exp(self._log_weighted - self._log_shift)
@@ -298,8 +342,8 @@ class MixtureModel:
                     self._component_updaters.extend(
                         component.get_parameter_updaters(
                             self._worker_data[worker_id],
-                            self._gamma_sum_split[i],
-                            self._gamma_weighted_split[i]
+                            self._gamma_weighted_split[i],
+                            self._gamma_sum_split[i]
                         )
                     )
 
@@ -331,7 +375,7 @@ class MixtureModel:
                     if feedback is not None:
                         feedback(step, current_log_likelihood, difference)
 
-                    if difference <= tolerance:
+                    if tolerance is not None and difference <= tolerance:
                         break
                 else:
                     if feedback is not None:
@@ -346,7 +390,7 @@ class MixtureModel:
 
 
 def feedback_sub(step, current_log_likelihood, difference):
-    if difference is not None:
+    if step > 0:
         print("{0}:\tmean-log-likelihood {1:.8f}\tdifference {2}".format(
             step, current_log_likelihood, difference))
     else:
@@ -414,3 +458,43 @@ tf_gmm_tools.plot_fitted_data(
     final_means[:, :2], final_covariances[:, :2, :2],
     true_means[:, :2], true_covariances[:, :2, :2]
 )
+
+
+"""
+DIMENSIONS = 2
+COMPONENTS = 10
+NUM_POINTS = 10000
+
+TRAINING_STEPS = 1000
+TOLERANCE = 10e-6
+
+
+print("Generating data...")
+np.random.seed(10)
+val_counts = np.random.randint(10, 100, (DIMENSIONS,))
+synthetic_data = np.zeros((NUM_POINTS, DIMENSIONS), dtype=np.int32)
+for cnt in range(len(val_counts)):
+    synthetic_data[:, cnt] = np.random.randint(
+        0, high=val_counts[cnt], size=(NUM_POINTS,)
+    )
+np.random.seed()
+
+print("Initializing components...")
+mixture_components = []
+for c in range(COMPONENTS):
+    mixture_components.append(
+        CategoricalDistribution(
+            val_counts
+        )
+    )
+
+print("Initializing model...")
+gmm = MixtureModel(synthetic_data, mixture_components)
+
+print("Training model...\n")
+result = gmm.train(tolerance=TOLERANCE, feedback=feedback_sub)
+
+final_means = np.stack([result[2][i][0] for i in range(COMPONENTS)])
+final_covariances = np.stack([result[2][i][1] for i in range(COMPONENTS)])
+final_weights = result[1]
+"""
