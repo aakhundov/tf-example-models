@@ -30,7 +30,7 @@ def generate_gmm_data(size, components, dimensions, seed, diagonal=False, isotro
     weights = np.abs(np.random.normal(size=[components]))
     weights /= np.sum(weights)
 
-    result = np.empty((size, dimensions), dtype=np.float32)
+    result = np.empty((size, dimensions), dtype=np.float64)
     responsibilities = np.empty((size,), dtype=np.int32)
     component_array = np.array(range(components))
 
