@@ -217,15 +217,15 @@ class GaussianDistribution:
         ]
 
     def get_log_probabilities(self, data):
-        quadratic_form = self._covariance.get_quadratic_form(data, self._mean)
+        quadratic_form = self._covariance.get_quadratic_form(data[0], self._mean)
         log_coefficient = self._ln2piD + self._covariance.get_log_determinant()
 
         return -0.5 * (log_coefficient + quadratic_form)
 
     def get_parameter_updaters(self, data, gamma_weighted, gamma_sum):
-        new_mean = tf.reduce_sum(data * tf.expand_dims(gamma_weighted, 1), 0)
+        new_mean = tf.reduce_sum(data[0] * tf.expand_dims(gamma_weighted, 1), 0)
         covariance_updater = self._covariance.get_value_updater(
-            data, new_mean, gamma_weighted, gamma_sum)
+            data[0], new_mean, gamma_weighted, gamma_sum)
 
         return [covariance_updater, self._mean.assign(new_mean)]
 
@@ -258,7 +258,7 @@ class CategoricalDistribution:
         for dim in range(self.dims):
             log_means = tf.log(self._means[dim])
             log_probabilities.append(
-                tf.gather(log_means, data[:, dim])
+                tf.gather(log_means, data[0][:, dim])
             )
 
         stacked = tf.parallel_stack(log_probabilities)
@@ -268,9 +268,47 @@ class CategoricalDistribution:
     def get_parameter_updaters(self, data, gamma_weighted, gamma_sum):
         parameter_updaters = []
         for dim in range(self.dims):
-            partition = tf.dynamic_partition(gamma_weighted, data[:, dim], self.counts[dim])
+            partition = tf.dynamic_partition(gamma_weighted, data[0][:, dim], self.counts[dim])
             new_means = tf.parallel_stack([tf.reduce_sum(p) for p in partition])
             parameter_updaters.append(self._means[dim].assign(new_means))
+
+        return parameter_updaters
+
+
+class ProductDistribution:
+
+    def __init__(self, distributions):
+        self.count = len(distributions)
+        self.distributions = distributions
+
+    def initialize(self, dtype=tf.float64):
+        for dist in self.distributions:
+            dist.initialize(dtype)
+
+    def get_parameters(self):
+        return [dist.get_parameters() for dist in self.distributions]
+
+    def get_log_probabilities(self, data):
+        log_probabilities = []
+        for dist in range(self.count):
+            log_probabilities.append(
+                self.distributions[dist].get_log_probabilities(
+                    [data[dist]]
+                )
+            )
+
+        stacked = tf.parallel_stack(log_probabilities)
+
+        return tf.reduce_sum(stacked, axis=0)
+
+    def get_parameter_updaters(self, data, gamma_weighted, gamma_sum):
+        parameter_updaters = []
+        for dist in range(self.count):
+            parameter_updaters.extend(
+                self.distributions[dist].get_parameter_updaters(
+                    [data[dist]], gamma_weighted, gamma_sum
+                )
+            )
 
         return parameter_updaters
 
@@ -278,9 +316,12 @@ class CategoricalDistribution:
 class MixtureModel:
 
     def __init__(self, data, components, cluster=None, dtype=tf.float64):
+        if isinstance(data, np.ndarray):
+            data = [data]
+
         self.data = data
-        self.dims = data.shape[1]
-        self.num_points = data.shape[0]
+        self.dims = sum(d.shape[1] for d in data)
+        self.num_points = data[0].shape[0]
         self.components = components
 
         self._initialize_workers(cluster)
@@ -300,15 +341,20 @@ class MixtureModel:
         with self.graph.as_default():
             self._dims = tf.constant(self.dims, dtype=dtype)
             self._num_points = tf.constant(self.num_points, dtype=dtype)
-            self._input = tf.placeholder(self.data.dtype, shape=[self.num_points, self.dims])
 
             self._weights = tf.Variable(tf.cast(tf.fill([len(self.components)], 1.0 / len(self.components)), dtype))
+
+            self._inputs = []
+            for data in self.data:
+                self._inputs.append(tf.placeholder(
+                    data.dtype, shape=[self.num_points, data.shape[1]]
+                ))
 
             self._worker_data = []
             for w in self.workers:
                 with tf.device(w):
                     self._worker_data.append(
-                        tf.Variable(self._input, trainable=False)
+                        [tf.Variable(input, trainable=False) for input in self._inputs]
                     )
 
             self._component_log_probabilities = []
@@ -359,7 +405,7 @@ class MixtureModel:
         with tf.Session(target=self.master_host, graph=self.graph) as sess:
             sess.run(
                 tf.global_variables_initializer(),
-                feed_dict={self._input: self.data}
+                feed_dict={self._inputs[i]: self.data[i] for i in range(len(self.data))}
             )
 
             previous_log_likelihood = -np.inf
@@ -480,13 +526,18 @@ print("Initializing components...")
 mixture_components = []
 for c in range(COMPONENTS):
     mixture_components.append(
-        CategoricalDistribution(
-            val_counts
-        )
+        ProductDistribution([
+            CategoricalDistribution(
+                val_counts[:5]
+            ),
+            CategoricalDistribution(
+                val_counts[5:]
+            )
+        ])
     )
 
 print("Initializing model...")
-gmm = MixtureModel(synthetic_data, mixture_components)
+gmm = MixtureModel([synthetic_data[:, :5], synthetic_data[:, 5:]], mixture_components)
 
 print("Training model...\n")
 result = gmm.train(tolerance=TOLERANCE, feedback=feedback_sub)
