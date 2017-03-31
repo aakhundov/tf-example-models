@@ -246,7 +246,7 @@ class CategoricalDistribution:
                 if self.means is not None:
                     mean = tf.Variable(self.means[dim], dtype=dtype)
                 else:
-                    rand = tf.random_uniform([self.counts[dim]], minval=0.25, maxval=0.75, dtype=dtype)
+                    rand = tf.random_uniform([self.counts[dim]], maxval=1.0, dtype=dtype)
                     mean = tf.Variable(rand / tf.reduce_sum(rand))
                 self._means.append(mean)
 
@@ -256,8 +256,9 @@ class CategoricalDistribution:
     def get_log_probabilities(self, data):
         log_probabilities = []
         for dim in range(self.dims):
+            log_means = tf.log(self._means[dim])
             log_probabilities.append(
-                tf.gather(tf.log(self._means[dim]), data[:, dim])
+                tf.gather(log_means, data[:, dim])
             )
 
         stacked = tf.parallel_stack(log_probabilities)
@@ -268,8 +269,8 @@ class CategoricalDistribution:
         parameter_updaters = []
         for dim in range(self.dims):
             partition = tf.dynamic_partition(gamma_weighted, data[:, dim], self.counts[dim])
-            new_mean = tf.parallel_stack([tf.reduce_sum(p) for p in partition])
-            parameter_updaters.append(self._means[dim].assign(new_mean))
+            new_means = tf.parallel_stack([tf.reduce_sum(p) for p in partition])
+            parameter_updaters.append(self._means[dim].assign(new_means))
 
         return parameter_updaters
 
@@ -398,6 +399,7 @@ def feedback_sub(step, current_log_likelihood, difference):
             step, current_log_likelihood))
 
 
+"""
 DIMENSIONS = 2
 COMPONENTS = 10
 NUM_POINTS = 10000
@@ -458,10 +460,10 @@ tf_gmm_tools.plot_fitted_data(
     final_means[:, :2], final_covariances[:, :2, :2],
     true_means[:, :2], true_covariances[:, :2, :2]
 )
-
-
 """
-DIMENSIONS = 2
+
+
+DIMENSIONS = 10
 COMPONENTS = 10
 NUM_POINTS = 10000
 
@@ -470,14 +472,9 @@ TOLERANCE = 10e-6
 
 
 print("Generating data...")
-np.random.seed(10)
-val_counts = np.random.randint(10, 100, (DIMENSIONS,))
-synthetic_data = np.zeros((NUM_POINTS, DIMENSIONS), dtype=np.int32)
-for cnt in range(len(val_counts)):
-    synthetic_data[:, cnt] = np.random.randint(
-        0, high=val_counts[cnt], size=(NUM_POINTS,)
-    )
-np.random.seed()
+synthetic_data, val_counts, true_means, true_weights, responsibilities = tf_gmm_tools.generate_cmm_data(
+    NUM_POINTS, COMPONENTS, DIMENSIONS, count_range=(2, 10), seed=10
+)
 
 print("Initializing components...")
 mixture_components = []
@@ -493,8 +490,3 @@ gmm = MixtureModel(synthetic_data, mixture_components)
 
 print("Training model...\n")
 result = gmm.train(tolerance=TOLERANCE, feedback=feedback_sub)
-
-final_means = np.stack([result[2][i][0] for i in range(COMPONENTS)])
-final_covariances = np.stack([result[2][i][1] for i in range(COMPONENTS)])
-final_weights = result[1]
-"""
