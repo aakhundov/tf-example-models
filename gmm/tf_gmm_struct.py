@@ -544,7 +544,7 @@ tf_gmm_tools.plot_fitted_data(
 )
 """
 
-
+"""
 DIMENSIONS = 10
 COMPONENTS = 10
 NUM_POINTS = 10000
@@ -555,7 +555,7 @@ TOLERANCE = 10e-6
 
 print("Generating data...")
 synthetic_data, val_counts, true_means, true_weights, responsibilities = tf_gmm_tools.generate_cmm_data(
-    NUM_POINTS, COMPONENTS, DIMENSIONS, count_range=(2, 10), seed=10
+    NUM_POINTS, COMPONENTS, DIMENSIONS, seed=10, count_range=(2, 10)
 )
 
 print("Initializing components...")
@@ -577,3 +577,73 @@ gmm = MixtureModel([synthetic_data[:, :5], synthetic_data[:, 5:]], mixture_compo
 
 print("Training model...\n")
 result = gmm.train(tolerance=TOLERANCE, feedback=feedback_sub)
+"""
+
+
+G_DIMENSIONS = 2
+C_DIMENSIONS = 2
+COMPONENTS = 10
+NUM_POINTS = 10000
+
+TRAINING_STEPS = 1000
+TOLERANCE = 10e-6
+
+
+print("Generating data...")
+c_data, g_data, c_counts, c_means, g_means, g_covariances, \
+    true_weights, responsibilities = tf_gmm_tools.generate_cgmm_data(
+        NUM_POINTS, COMPONENTS, C_DIMENSIONS, G_DIMENSIONS, seed=20)
+
+print("Computing avg. covariance...")
+avg_g_data_variance = np.var(g_data, axis=0).sum() / COMPONENTS / G_DIMENSIONS
+
+cluster_spec = tf.train.ClusterSpec({
+    "master": ["localhost:2222"],
+    "worker": ["localhost:2223", "localhost:2224", "localhost:2225"]
+})
+
+print("Initializing components...")
+mixture_components = [
+    ProductDistribution([
+        GaussianDistribution(
+            dims=G_DIMENSIONS,
+            mean=g_data[comp],
+            # covariance=IsotropicCovariance(
+            #     G_DIMENSIONS,
+            #     initial=avg_g_data_variance,
+            #     alpha=1.0, beta=1.0
+            # ),
+            # covariance=DiagonalCovariance(
+            #     G_DIMENSIONS,
+            #     initial=np.full((G_DIMENSIONS,), avg_g_data_variance),
+            #     alpha=1.0, beta=1.0
+            # ),
+            covariance=FullCovariance(
+                G_DIMENSIONS,
+                initial=np.diag(np.full((G_DIMENSIONS,), avg_g_data_variance)),
+                alpha=1.0, beta=1.0
+            ),
+        ),
+        CategoricalDistribution(
+            c_counts
+        )
+    ]) for comp in range(COMPONENTS)
+]
+
+print("Initializing model...")
+gmm = MixtureModel([g_data, c_data], mixture_components)
+
+print("Training model...\n")
+result = gmm.train(tolerance=TOLERANCE, feedback=feedback_sub)
+
+final_log_likelihood = result[0]
+final_weights = result[1]
+final_g_means = np.stack([result[2][i][0][0] for i in range(COMPONENTS)])
+final_g_covariances = np.stack([result[2][i][0][1] for i in range(COMPONENTS)])
+final_c_means = [result[2][i][1] for i in range(COMPONENTS)]
+
+tf_gmm_tools.plot_fitted_data(
+    g_data[:, :2],
+    final_g_means[:, :2], final_g_covariances[:, :2, :2],
+    g_means[:, :2], g_covariances[:, :2, :2]
+)
