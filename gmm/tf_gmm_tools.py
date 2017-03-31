@@ -21,8 +21,8 @@ def _generate_covariances(components, dimensions, diagonal=False, isotropic=Fals
     return covariances
 
 
-def generate_gmm_data(size, components, dimensions, seed, diagonal=False, isotropic=False):
-    """Generates synthetic data of a given size from a random GMM"""
+def generate_gmm_data(size, components, dimensions, seed=None, diagonal=False, isotropic=False):
+    """Generates synthetic data of a given size from a random Gaussian Mixture Model"""
     np.random.seed(seed)
 
     means = np.random.normal(size=[components, dimensions]) * 10
@@ -32,10 +32,9 @@ def generate_gmm_data(size, components, dimensions, seed, diagonal=False, isotro
 
     result = np.empty((size, dimensions), dtype=np.float64)
     responsibilities = np.empty((size,), dtype=np.int32)
-    component_array = np.array(range(components))
 
     for i in range(size):
-        comp = np.random.choice(component_array, p=weights)
+        comp = np.random.choice(components, p=weights)
 
         responsibilities[i] = comp
         result[i] = np.random.multivariate_normal(
@@ -45,6 +44,43 @@ def generate_gmm_data(size, components, dimensions, seed, diagonal=False, isotro
     np.random.seed()
 
     return result, means, covariances, weights, responsibilities
+
+
+def generate_cmm_data(size, components, dimensions, count_range=(2, 100), seed=None):
+    """Generates synthetic data of a given size from a random Categorical Mixture Model"""
+    np.random.seed(seed)
+
+    counts = np.random.randint(
+        count_range[0], count_range[1],
+        (dimensions,)
+    )
+
+    means = []
+    for comp in range(components):
+        comp_means = []
+        for dim in range(dimensions):
+            comp_means.append(np.random.uniform(0.25, 0.75, (counts[dim],)))
+            comp_means[-1] /= np.sum(comp_means[-1])
+        means.append(comp_means)
+
+    weights = np.abs(np.random.normal(size=[components]))
+    weights /= np.sum(weights)
+
+    result = np.empty((size, dimensions), dtype=np.int32)
+    responsibilities = np.empty((size,), dtype=np.int32)
+
+    for i in range(size):
+        comp = np.random.choice(components, p=weights)
+
+        responsibilities[i] = comp
+        for dim in range(dimensions):
+            result[i, dim] = np.random.choice(
+                counts[dim], p=means[comp][dim]
+            )
+
+    np.random.seed()
+
+    return result, counts, means, weights, responsibilities
 
 
 def _plot_gaussian(mean, covariance, color, zorder=0):
