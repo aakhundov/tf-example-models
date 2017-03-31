@@ -4,7 +4,28 @@ import tensorflow as tf
 import tf_gmm_tools
 
 
-class IsotropicCovariance:
+class CovarianceBase:
+
+    def initialize(self, dtype):
+        raise NotImplementedError()
+
+    def get_matrix(self):
+        raise NotImplementedError()
+    
+    def get_quadratic_form(self, data, mean):
+        raise NotImplementedError()
+    
+    def get_log_determinant(self):
+        raise NotImplementedError()
+    
+    def get_prior_adjustment(self, variance, gamma_sum):
+        raise NotImplementedError()
+    
+    def get_value_updater(self, data, new_mean, gamma_weighted, gamma_sum):
+        raise NotImplementedError()
+
+
+class IsotropicCovariance(CovarianceBase):
 
     def __init__(self, dims, initial=None, alpha=None, beta=None):
         self.dims = dims
@@ -65,7 +86,7 @@ class IsotropicCovariance:
         return self._variance_scalar.assign(new_variance)
 
 
-class DiagonalCovariance:
+class DiagonalCovariance(CovarianceBase):
 
     def __init__(self, dims, initial=None, alpha=None, beta=None):
         self.dims = dims
@@ -122,7 +143,7 @@ class DiagonalCovariance:
         return self._variance_vector.assign(new_variance)
 
 
-class FullCovariance:
+class FullCovariance(CovarianceBase):
 
     def __init__(self, dims, initial=None, alpha=None, beta=None):
         self.dims = dims
@@ -181,7 +202,22 @@ class FullCovariance:
         return self._covariance_matrix.assign(new_covariance)
 
 
-class GaussianDistribution:
+class DistributionBase:
+
+    def initialize(self, dtype):
+        raise NotImplementedError()
+
+    def get_parameters(self):
+        raise NotImplementedError()
+
+    def get_log_probabilities(self, data):
+        raise NotImplementedError()
+
+    def get_parameter_updaters(self, data, gamma_weighted, gamma_sum):
+        raise NotImplementedError()
+
+
+class GaussianDistribution(DistributionBase):
 
     def __init__(self, dims, mean=None, covariance=None):
         self.dims = dims
@@ -230,7 +266,7 @@ class GaussianDistribution:
         return [covariance_updater, self._mean.assign(new_mean)]
 
 
-class CategoricalDistribution:
+class CategoricalDistribution(DistributionBase):
 
     def __init__(self, counts, means=None):
         self.dims = len(counts)
@@ -275,7 +311,7 @@ class CategoricalDistribution:
         return parameter_updaters
 
 
-class ProductDistribution:
+class ProductDistribution(DistributionBase):
 
     def __init__(self, distributions):
         self.count = len(distributions)
