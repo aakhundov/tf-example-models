@@ -41,7 +41,7 @@ class GaussianDistribution(DistributionBase):
             if self.covariance is not None:
                 self._covariance = self.covariance
             else:
-                self._covariance = tf_gmm_cov.DiagonalCovariance(self.dims)
+                self._covariance = tf_gmm_cov.FullCovariance(self.dims)
 
             self._covariance.initialize(dtype)
 
@@ -55,7 +55,7 @@ class GaussianDistribution(DistributionBase):
         ]
 
     def get_log_probabilities(self, data):
-        quadratic_form = self._covariance.get_quadratic_form(data[0], self._mean)
+        quadratic_form = self._covariance.get_inv_quadratic_form(data[0], self._mean)
         log_coefficient = self._ln2piD + self._covariance.get_log_determinant()
 
         return -0.5 * (log_coefficient + quadratic_form)

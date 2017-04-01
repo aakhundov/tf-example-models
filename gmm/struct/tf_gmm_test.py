@@ -16,7 +16,7 @@ def feedback_sub(step, current_log_likelihood, difference):
             step, current_log_likelihood))
 
 
-def test_gmm(num_points, components, dimensions, tolerance, training_steps, cluster=None):
+def test_gmm(num_points, components, dimensions, rank, tolerance, training_steps, cluster=None):
     print("Generating data...")
     synthetic_data, true_means, true_covariances, true_weights, responsibilities = tf_gmm_tools.generate_gmm_data(
         num_points, components, dimensions, seed=10, diagonal=False)
@@ -33,19 +33,24 @@ def test_gmm(num_points, components, dimensions, tolerance, training_steps, clus
                 mean=synthetic_data[c],
                 # covariance=tf_gmm_cov.IsotropicCovariance(
                 #     dimensions,
-                #     initial=avg_data_variance,
+                #     scalar=avg_data_variance,
                 #     alpha=1.0, beta=1.0
                 # ),
                 # covariance=tf_gmm_cov.DiagonalCovariance(
                 #     dimensions,
-                #     initial=np.full((dimensions,), avg_data_variance),
+                #     vector=np.full((dimensions,), avg_data_variance),
                 #     alpha=1.0, beta=1.0
                 # ),
-                covariance=tf_gmm_cov.FullCovariance(
-                    dimensions,
-                    initial=np.diag(np.full((dimensions,), avg_data_variance)),
+                covariance=tf_gmm_cov.SparseCovariance(
+                    dimensions, rank,
+                    baseline=avg_data_variance,
                     alpha=1.0, beta=1.0
                 ),
+                # covariance=tf_gmm_cov.FullCovariance(
+                #     dimensions,
+                #     matrix=np.diag(np.full((dimensions,), avg_data_variance)),
+                #     alpha=1.0, beta=1.0
+                # ),
             )
         )
 
@@ -91,7 +96,7 @@ def test_cmm(num_points, components, dimensions, tolerance, training_steps, clus
     return result
 
 
-def test_cgmm(num_points, components, g_dimensions, c_dimensions, tolerance, training_steps, cluster=None):
+def test_cgmm(num_points, components, g_dimensions, g_rank, c_dimensions, tolerance, training_steps, cluster=None):
     print("Generating data...")
     c_data, g_data, c_counts, c_means, g_means, g_covariances, \
         true_weights, responsibilities = tf_gmm_tools.generate_cgmm_data(
@@ -108,19 +113,24 @@ def test_cgmm(num_points, components, g_dimensions, c_dimensions, tolerance, tra
                 mean=g_data[comp],
                 # covariance=tf_gmm_cov.IsotropicCovariance(
                 #     g_dimensions,
-                #     initial=avg_g_data_variance,
+                #     scalar=avg_g_data_variance,
                 #     alpha=1.0, beta=1.0
                 # ),
                 # covariance=tf_gmm_cov.DiagonalCovariance(
                 #     g_dimensions,
-                #     initial=np.full((g_dimensions,), avg_g_data_variance),
+                #     vector=np.full((g_dimensions,), avg_g_data_variance),
                 #     alpha=1.0, beta=1.0
                 # ),
-                covariance=tf_gmm_cov.FullCovariance(
-                    g_dimensions,
-                    initial=np.diag(np.full((g_dimensions,), avg_g_data_variance)),
+                covariance=tf_gmm_cov.SparseCovariance(
+                    g_dimensions, g_rank,
+                    baseline=avg_g_data_variance,
                     alpha=1.0, beta=1.0
                 ),
+                # covariance=tf_gmm_cov.FullCovariance(
+                #     g_dimensions,
+                #     matrix=np.diag(np.full((g_dimensions,), avg_g_data_variance)),
+                #     alpha=1.0, beta=1.0
+                # ),
             ),
             tf_gmm_dist.CategoricalDistribution(
                 c_counts
@@ -147,6 +157,7 @@ def test_cgmm(num_points, components, g_dimensions, c_dimensions, tolerance, tra
     return result
 
 
+G_RANK = 1
 G_DIMENSIONS = 2
 C_DIMENSIONS = 2
 COMPONENTS = 10
@@ -160,6 +171,6 @@ cluster_spec = tf.train.ClusterSpec({
     "worker": ["localhost:2223", "localhost:2224"]
 })
 
-# test_gmm(NUM_POINTS, COMPONENTS, G_DIMENSIONS, TOLERANCE, TRAINING_STEPS)
+# test_gmm(NUM_POINTS, COMPONENTS, G_DIMENSIONS, G_RANK, TOLERANCE, TRAINING_STEPS)
 # test_cmm(NUM_POINTS, COMPONENTS, C_DIMENSIONS, TOLERANCE, TRAINING_STEPS)
-test_cgmm(NUM_POINTS, COMPONENTS, G_DIMENSIONS, C_DIMENSIONS, TOLERANCE, TRAINING_STEPS)
+test_cgmm(NUM_POINTS, COMPONENTS, G_DIMENSIONS, G_RANK, C_DIMENSIONS, TOLERANCE, TRAINING_STEPS)
