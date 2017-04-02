@@ -115,22 +115,21 @@ class CategoricalDistribution(DistributionBase):
 
 class ProductDistribution(DistributionBase):
 
-    def __init__(self, distributions):
-        self.count = len(distributions)
-        self.distributions = distributions
+    def __init__(self, factors):
+        self.factors = factors
 
     def initialize(self, dtype=tf.float64):
-        for dist in self.distributions:
+        for dist in self.factors:
             dist.initialize(dtype)
 
     def get_parameters(self):
-        return [dist.get_parameters() for dist in self.distributions]
+        return [dist.get_parameters() for dist in self.factors]
 
     def get_log_probabilities(self, data):
         log_probabilities = []
-        for dist in range(self.count):
+        for dist in range(len(self.factors)):
             log_probabilities.append(
-                self.distributions[dist].get_log_probabilities(
+                self.factors[dist].get_log_probabilities(
                     [data[dist]]
                 )
             )
@@ -141,9 +140,9 @@ class ProductDistribution(DistributionBase):
 
     def get_parameter_updaters(self, data, gamma_weighted, gamma_sum):
         parameter_updaters = []
-        for dist in range(self.count):
+        for dist in range(len(self.factors)):
             parameter_updaters.extend(
-                self.distributions[dist].get_parameter_updaters(
+                self.factors[dist].get_parameter_updaters(
                     [data[dist]], gamma_weighted, gamma_sum
                 )
             )
