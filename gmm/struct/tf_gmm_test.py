@@ -34,22 +34,22 @@ def test_gmm(num_points, components, dimensions, rank, tolerance, training_steps
                 # covariance=tf_gmm_cov.IsotropicCovariance(
                 #     dimensions,
                 #     scalar=avg_data_variance,
-                #     alpha=1.0, beta=1.0
+                #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
                 # covariance=tf_gmm_cov.DiagonalCovariance(
                 #     dimensions,
                 #     vector=np.full((dimensions,), avg_data_variance),
-                #     alpha=1.0, beta=1.0
+                #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
                 covariance=tf_gmm_cov.SparseCovariance(
                     dimensions, rank,
                     baseline=avg_data_variance,
-                    alpha=1.0, beta=1.0
+                    prior={"alpha": 1.0, "beta": 1.0}
                 ),
                 # covariance=tf_gmm_cov.FullCovariance(
                 #     dimensions,
                 #     matrix=np.diag(np.full((dimensions,), avg_data_variance)),
-                #     alpha=1.0, beta=1.0, approx_log_det=False
+                #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
             )
         )
@@ -114,22 +114,22 @@ def test_cgmm(num_points, components, g_dimensions, g_rank, c_dimensions, tolera
                 # covariance=tf_gmm_cov.IsotropicCovariance(
                 #     g_dimensions,
                 #     scalar=avg_g_data_variance,
-                #     alpha=1.0, beta=1.0
+                #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
                 # covariance=tf_gmm_cov.DiagonalCovariance(
                 #     g_dimensions,
                 #     vector=np.full((g_dimensions,), avg_g_data_variance),
-                #     alpha=1.0, beta=1.0
+                #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
                 covariance=tf_gmm_cov.SparseCovariance(
                     g_dimensions, g_rank,
                     baseline=avg_g_data_variance,
-                    alpha=1.0, beta=1.0
+                    prior={"alpha": 1.0, "beta": 1.0}
                 ),
                 # covariance=tf_gmm_cov.FullCovariance(
                 #     g_dimensions,
                 #     matrix=np.diag(np.full((g_dimensions,), avg_g_data_variance)),
-                #     alpha=1.0, beta=1.0, approx_log_det=False
+                #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
             ),
             tf_gmm_dist.CategoricalDistribution(

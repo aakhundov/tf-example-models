@@ -21,11 +21,10 @@ class CovarianceBase:
 
 class IsotropicCovariance(CovarianceBase):
 
-    def __init__(self, dims, scalar=None, alpha=None, beta=None):
+    def __init__(self, dims, scalar=None, prior=None):
         self.dims = dims
         self.scalar = scalar
-        self.alpha = alpha
-        self.beta = beta
+        self.prior = prior
 
         self._variance_scalar = None
         self._prior = None
@@ -41,10 +40,10 @@ class IsotropicCovariance(CovarianceBase):
                 self._variance_scalar = tf.Variable(1.0, dtype=dtype)
 
         if self._prior is None:
-            if self.alpha is not None and self.beta is not None:
+            if self.prior is not None:
                 self._prior = True
-                self._alpha = tf.constant(self.alpha, dtype=dtype)
-                self._beta = tf.constant(self.beta, dtype=dtype)
+                self._alpha = tf.constant(self.prior["alpha"], dtype=dtype)
+                self._beta = tf.constant(self.prior["beta"], dtype=dtype)
             else:
                 self._prior = False
 
@@ -82,11 +81,10 @@ class IsotropicCovariance(CovarianceBase):
 
 class DiagonalCovariance(CovarianceBase):
 
-    def __init__(self, dims, vector=None, alpha=None, beta=None):
+    def __init__(self, dims, vector=None, prior=None):
         self.dims = dims
         self.vector = vector
-        self.alpha = alpha
-        self.beta = beta
+        self.prior = prior
 
         self._variance_vector = None
         self._prior = None
@@ -101,10 +99,10 @@ class DiagonalCovariance(CovarianceBase):
                 self._variance_vector = tf.Variable(tf.cast(tf.fill([self.dims], 1.0), dtype))
 
         if self._prior is None:
-            if self.alpha is not None and self.beta is not None:
+            if self.prior is not None:
                 self._prior = True
-                self._alpha = tf.constant(self.alpha, dtype=dtype)
-                self._beta = tf.constant(self.beta, dtype=dtype)
+                self._alpha = tf.constant(self.prior["alpha"], dtype=dtype)
+                self._beta = tf.constant(self.prior["beta"], dtype=dtype)
             else:
                 self._prior = False
 
@@ -139,14 +137,13 @@ class DiagonalCovariance(CovarianceBase):
 
 class SparseCovariance(CovarianceBase):
 
-    def __init__(self, dims, rank, baseline, eigvals=None, eigvecs=None, alpha=None, beta=None):
+    def __init__(self, dims, rank, baseline, eigvals=None, eigvecs=None, prior=None):
         self.dims = dims
         self.rank = rank
         self.baseline = baseline
         self.eigvals = eigvals
         self.eigvecs = eigvecs
-        self.alpha = alpha
-        self.beta = beta
+        self.prior = prior
 
         self._baseline = None
         self._eigvals = None
@@ -173,10 +170,10 @@ class SparseCovariance(CovarianceBase):
                 self._eigvecs = tf.Variable(tf.zeros([self.rank, self.dims], dtype))
 
         if self._prior is None:
-            if self.alpha is not None and self.beta is not None:
+            if self.prior is not None:
                 self._prior = True
-                self._alpha = tf.constant(self.alpha, dtype=dtype)
-                self._beta = tf.constant(self.beta, dtype=dtype)
+                self._alpha = tf.constant(self.prior["alpha"], dtype=dtype)
+                self._beta = tf.constant(self.prior["beta"], dtype=dtype)
             else:
                 self._prior = False
 
@@ -240,11 +237,10 @@ class SparseCovariance(CovarianceBase):
 
 class FullCovariance(CovarianceBase):
 
-    def __init__(self, dims, matrix=None, alpha=None, beta=None, approx_log_det=False):
+    def __init__(self, dims, matrix=None, prior=None, approx_log_det=False):
         self.dims = dims
         self.matrix = matrix
-        self.alpha = alpha
-        self.beta = beta
+        self.prior = prior
 
         self.approx_log_det = approx_log_det
 
@@ -261,10 +257,10 @@ class FullCovariance(CovarianceBase):
                 self._covariance_matrix = tf.Variable(tf.diag(tf.cast(tf.fill([self.dims], 1.0), dtype)))
 
         if self._prior is None:
-            if self.alpha is not None and self.beta is not None:
+            if self.prior is not None:
                 self._prior = True
-                self._alpha = tf.constant(self.alpha, dtype=dtype)
-                self._beta = tf.constant(self.beta, dtype=dtype)
+                self._alpha = tf.constant(self.prior["alpha"], dtype=dtype)
+                self._beta = tf.constant(self.prior["beta"], dtype=dtype)
             else:
                 self._prior = False
 
