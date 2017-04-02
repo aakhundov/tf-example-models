@@ -49,7 +49,7 @@ def test_gmm(num_points, components, dimensions, rank, tolerance, training_steps
                 # covariance=tf_gmm_cov.FullCovariance(
                 #     dimensions,
                 #     matrix=np.diag(np.full((dimensions,), avg_data_variance)),
-                #     alpha=1.0, beta=1.0
+                #     alpha=1.0, beta=1.0, approx_log_det=False
                 # ),
             )
         )
@@ -129,7 +129,7 @@ def test_cgmm(num_points, components, g_dimensions, g_rank, c_dimensions, tolera
                 # covariance=tf_gmm_cov.FullCovariance(
                 #     g_dimensions,
                 #     matrix=np.diag(np.full((g_dimensions,), avg_g_data_variance)),
-                #     alpha=1.0, beta=1.0
+                #     alpha=1.0, beta=1.0, approx_log_det=False
                 # ),
             ),
             tf_gmm_dist.CategoricalDistribution(
