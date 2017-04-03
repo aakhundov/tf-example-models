@@ -13,7 +13,12 @@ class MixtureModel:
         self.num_points = data[0].shape[0]
         self.components = components
 
+        self.tf_graph = tf.Graph()
+
         self._initialize_workers(cluster)
+        self._initialize_component_mapping()
+        self._initialize_data_sources()
+        self._initialize_variables(dtype)
         self._initialize_graph(dtype)
 
     def _initialize_workers(self, cluster):
@@ -24,102 +29,115 @@ class MixtureModel:
             self.master_host = "grpc://" + cluster.job_tasks("master")[0]
             self.workers = ["/job:worker/task:" + str(i) for i in range(cluster.num_tasks("worker"))]
 
-    def _initialize_graph(self, dtype=tf.float64):
-        self.graph = tf.Graph()
+    def _initialize_component_mapping(self):
+        self.mapping = {
+            w: [] for w in range(len(self.workers))
+        }
+        for component_id in range(len(self.components)):
+            worker_id = component_id % len(self.workers)
+            self.mapping[worker_id].append(component_id)
 
-        with self.graph.as_default():
-            self._dims = tf.constant(self.dims, dtype=dtype)
-            self._num_points = tf.constant(self.num_points, dtype=dtype)
-
-            self._weights = tf.Variable(tf.cast(tf.fill([len(self.components)], 1.0 / len(self.components)), dtype))
-
-            self._inputs = []
+    def _initialize_data_sources(self):
+        with self.tf_graph.as_default():
+            self.tf_input_sources = []
             for data in self.data:
-                self._inputs.append(tf.placeholder(
+                self.tf_input_sources.append(tf.placeholder(
                     data.dtype, shape=[self.num_points, data.shape[1]]
                 ))
 
-            self._worker_data = []
+            self.tf_worker_data = []
             for w in self.workers:
                 with tf.device(w):
-                    self._worker_data.append(
-                        [tf.Variable(input, trainable=False) for input in self._inputs]
+                    self.tf_worker_data.append(
+                        [tf.Variable(input, trainable=False)
+                         for input in self.tf_input_sources]
                     )
 
-            self._component_log_probabilities = []
-            for i in range(len(self.components)):
-                component = self.components[i]
-                worker_id = i % len(self.workers)
-                with tf.device(self.workers[worker_id]):
-                    component.initialize(dtype)
-                    self._component_log_probabilities.append(
-                        component.get_log_probabilities(self._worker_data[worker_id])
-                    )
+    def _initialize_variables(self, dtype):
+        with self.tf_graph.as_default():
+            self.tf_dims = tf.constant(self.dims, dtype=dtype)
+            self.tf_num_points = tf.constant(self.num_points, dtype=dtype)
+            self.tf_weights = tf.Variable(
+                tf.cast(tf.fill(
+                    [len(self.components)], 1.0 / len(self.components)
+                ), dtype)
+            )
 
-            self._log_components = tf.parallel_stack(self._component_log_probabilities)
-            self._log_weighted = self._log_components + tf.expand_dims(tf.log(self._weights), 1)
-            self._log_shift = tf.expand_dims(tf.reduce_max(self._log_weighted, 0), 0)
-            self._exp_log_shifted = tf.exp(self._log_weighted - self._log_shift)
-            self._exp_log_shifted_sum = tf.reduce_sum(self._exp_log_shifted, 0)
-            self._log_likelihood = tf.reduce_sum(tf.log(self._exp_log_shifted_sum)) + tf.reduce_sum(self._log_shift)
-            self._mean_log_likelihood = self._log_likelihood / (self._num_points * self._dims)
-
-            self._gamma = self._exp_log_shifted / self._exp_log_shifted_sum
-            self._gamma_sum = tf.reduce_sum(self._gamma, 1)
-            self._gamma_weighted = self._gamma / tf.expand_dims(self._gamma_sum, 1)
-            self._gamma_sum_split = tf.unstack(self._gamma_sum)
-            self._gamma_weighted_split = tf.unstack(self._gamma_weighted)
-
-            self._component_updaters = []
-            for i in range(len(self.components)):
-                component = self.components[i]
-                worker_id = i % len(self.workers)
-                with tf.device(self.workers[worker_id]):
-                    self._component_updaters.extend(
-                        component.get_parameter_updaters(
-                            self._worker_data[worker_id],
-                            self._gamma_weighted_split[i],
-                            self._gamma_sum_split[i]
+    def _initialize_graph(self, dtype=tf.float64):
+        with self.tf_graph.as_default():
+            tf_component_log_probabilities = []
+            for worker_id in self.mapping.keys():
+                for component_id in self.mapping[worker_id]:
+                    with tf.device(self.workers[worker_id]):
+                        self.components[component_id].initialize(dtype)
+                        tf_component_log_probabilities.append(
+                            self.components[component_id].get_log_probabilities(
+                                self.tf_worker_data[worker_id]
+                            )
                         )
-                    )
 
-            self._new_weights = self._gamma_sum / self._num_points
-            self._weights_updater = self._weights.assign(self._new_weights)
-            self._all_updaters = self._component_updaters + [self._weights_updater]
-            self._train_step = tf.group(*self._all_updaters)
+            tf_log_components = tf.parallel_stack(tf_component_log_probabilities)
+            tf_log_weighted = tf_log_components + tf.expand_dims(tf.log(self.tf_weights), 1)
+            tf_log_shift = tf.expand_dims(tf.reduce_max(tf_log_weighted, 0), 0)
+            tf_exp_log_shifted = tf.exp(tf_log_weighted - tf_log_shift)
+            tf_exp_log_shifted_sum = tf.reduce_sum(tf_exp_log_shifted, 0)
+            tf_log_likelihood = tf.reduce_sum(tf.log(tf_exp_log_shifted_sum)) + tf.reduce_sum(tf_log_shift)
 
-            self._component_parameters = [comp.get_parameters() for comp in self.components]
+            self.tf_mean_log_likelihood = tf_log_likelihood / (self.tf_num_points * self.tf_dims)
+
+            tf_gamma = tf_exp_log_shifted / tf_exp_log_shifted_sum
+            tf_gamma_sum = tf.reduce_sum(tf_gamma, 1)
+            tf_gamma_weighted = tf_gamma / tf.expand_dims(tf_gamma_sum, 1)
+            tf_gamma_sum_split = tf.unstack(tf_gamma_sum)
+            tf_gamma_weighted_split = tf.unstack(tf_gamma_weighted)
+
+            tf_component_updaters = []
+            for worker_id in self.mapping.keys():
+                for component_id in self.mapping[worker_id]:
+                    with tf.device(self.workers[worker_id]):
+                        tf_component_updaters.extend(
+                            self.components[component_id].get_parameter_updaters(
+                                self.tf_worker_data[worker_id],
+                                tf_gamma_weighted_split[component_id],
+                                tf_gamma_sum_split[component_id]
+                            )
+                        )
+
+            tf_new_weights = tf_gamma_sum / self.tf_num_points
+            tf_weights_updater = self.tf_weights.assign(tf_new_weights)
+            tf_all_updaters = tf_component_updaters + [tf_weights_updater]
+
+            self.tf_train_step = tf.group(*tf_all_updaters)
+            self.tf_component_parameters = [
+                comp.get_parameters() for comp in self.components
+            ]
 
     def train(self, tolerance=10e-6, max_steps=1000, feedback=None):
-        with tf.Session(target=self.master_host, graph=self.graph) as sess:
+        with tf.Session(target=self.master_host, graph=self.tf_graph) as sess:
             sess.run(
                 tf.global_variables_initializer(),
-                feed_dict={self._inputs[i]: self.data[i] for i in range(len(self.data))}
+                feed_dict={self.tf_input_sources[i]: self.data[i] for i in range(len(self.data))}
             )
 
             previous_log_likelihood = -np.inf
-
             for step in range(max_steps):
                 _, current_log_likelihood = sess.run([
-                    self._train_step,
-                    self._mean_log_likelihood
+                    self.tf_train_step,
+                    self.tf_mean_log_likelihood
                 ])
 
                 if step > 0:
                     difference = current_log_likelihood - previous_log_likelihood
-
                     if feedback is not None:
                         feedback(step, current_log_likelihood, difference)
-
                     if tolerance is not None and difference <= tolerance:
                         break
                 else:
                     if feedback is not None:
                         feedback(step, current_log_likelihood, None)
-
                 previous_log_likelihood = current_log_likelihood
 
             return sess.run([
-                self._mean_log_likelihood,
-                self._weights, self._component_parameters
+                self.tf_mean_log_likelihood,
+                self.tf_weights, self.tf_component_parameters
             ])

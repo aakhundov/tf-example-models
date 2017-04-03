@@ -25,58 +25,58 @@ class IsotropicCovariance(CovarianceBase):
         self.dims = dims
         self.scalar = scalar
         self.prior = prior
+        self.has_prior = None
 
-        self._variance_scalar = None
-        self._prior = None
-        self._alpha = None
-        self._beta = None
-        self._dims = None
+        self.tf_variance_scalar = None
+        self.tf_alpha = None
+        self.tf_beta = None
+        self.tf_dims = None
 
     def initialize(self, dtype=tf.float64):
-        if self._variance_scalar is None:
+        if self.tf_variance_scalar is None:
             if self.scalar is not None:
-                self._variance_scalar = tf.Variable(self.scalar, dtype=dtype)
+                self.tf_variance_scalar = tf.Variable(self.scalar, dtype=dtype)
             else:
-                self._variance_scalar = tf.Variable(1.0, dtype=dtype)
+                self.tf_variance_scalar = tf.Variable(1.0, dtype=dtype)
 
-        if self._prior is None:
+        if self.has_prior is None:
             if self.prior is not None:
-                self._prior = True
-                self._alpha = tf.constant(self.prior["alpha"], dtype=dtype)
-                self._beta = tf.constant(self.prior["beta"], dtype=dtype)
+                self.has_prior = True
+                self.tf_alpha = tf.constant(self.prior["alpha"], dtype=dtype)
+                self.tf_beta = tf.constant(self.prior["beta"], dtype=dtype)
             else:
-                self._prior = False
+                self.has_prior = False
 
-        self._dims = tf.constant(self.dims, dtype=dtype)
+        self.tf_dims = tf.constant(self.dims, dtype=dtype)
 
     def get_matrix(self):
-        return tf.diag(tf.fill([self.dims], self._variance_scalar))
+        return tf.diag(tf.fill([self.dims], self.tf_variance_scalar))
 
     def get_inv_quadratic_form(self, data, mean):
-        sq_distances = tf.squared_difference(data, tf.expand_dims(mean, 0))
-        sum_sq_distances = tf.reduce_sum(sq_distances, 1)
+        tf_sq_distances = tf.squared_difference(data, tf.expand_dims(mean, 0))
+        tf_sum_sq_distances = tf.reduce_sum(tf_sq_distances, 1)
 
-        return sum_sq_distances / self._variance_scalar
+        return tf_sum_sq_distances / self.tf_variance_scalar
 
     def get_log_determinant(self):
-        return self._dims * tf.log(self._variance_scalar)
+        return self.tf_dims * tf.log(self.tf_variance_scalar)
 
     def get_prior_adjustment(self, original, gamma_sum):
-        adjusted = original
-        adjusted *= gamma_sum
-        adjusted += (2.0 * self._beta)
-        adjusted /= gamma_sum + (2.0 * (self._alpha + 1.0))
+        tf_adjusted = original
+        tf_adjusted *= gamma_sum
+        tf_adjusted += (2.0 * self.tf_beta)
+        tf_adjusted /= gamma_sum + (2.0 * (self.tf_alpha + 1.0))
 
-        return adjusted
+        return tf_adjusted
 
     def get_value_updater(self, data, new_mean, gamma_weighted, gamma_sum):
-        new_sq_distances = tf.squared_difference(data, tf.expand_dims(new_mean, 0))
-        new_variance = tf.reduce_sum(new_sq_distances * tf.expand_dims(gamma_weighted, 1)) / self._dims
+        tf_new_sq_distances = tf.squared_difference(data, tf.expand_dims(new_mean, 0))
+        tf_new_variance = tf.reduce_sum(tf_new_sq_distances * tf.expand_dims(gamma_weighted, 1)) / self.tf_dims
 
-        if self._prior:
-            new_variance = self.get_prior_adjustment(new_variance, gamma_sum)
+        if self.has_prior:
+            tf_new_variance = self.get_prior_adjustment(tf_new_variance, gamma_sum)
 
-        return self._variance_scalar.assign(new_variance)
+        return self.tf_variance_scalar.assign(tf_new_variance)
 
 
 class DiagonalCovariance(CovarianceBase):
@@ -85,54 +85,54 @@ class DiagonalCovariance(CovarianceBase):
         self.dims = dims
         self.vector = vector
         self.prior = prior
+        self.has_prior = None
 
-        self._variance_vector = None
-        self._prior = None
-        self._alpha = None
-        self._beta = None
+        self.tf_variance_vector = None
+        self.tf_alpha = None
+        self.tf_beta = None
 
     def initialize(self, dtype=tf.float64):
-        if self._variance_vector is None:
+        if self.tf_variance_vector is None:
             if self.vector is not None:
-                self._variance_vector = tf.Variable(self.vector, dtype=dtype)
+                self.tf_variance_vector = tf.Variable(self.vector, dtype=dtype)
             else:
-                self._variance_vector = tf.Variable(tf.cast(tf.fill([self.dims], 1.0), dtype))
+                self.tf_variance_vector = tf.Variable(tf.cast(tf.fill([self.dims], 1.0), dtype))
 
-        if self._prior is None:
+        if self.has_prior is None:
             if self.prior is not None:
-                self._prior = True
-                self._alpha = tf.constant(self.prior["alpha"], dtype=dtype)
-                self._beta = tf.constant(self.prior["beta"], dtype=dtype)
+                self.has_prior = True
+                self.tf_alpha = tf.constant(self.prior["alpha"], dtype=dtype)
+                self.tf_beta = tf.constant(self.prior["beta"], dtype=dtype)
             else:
-                self._prior = False
+                self.has_prior = False
 
     def get_matrix(self):
-        return tf.diag(self._variance_vector)
+        return tf.diag(self.tf_variance_vector)
 
     def get_inv_quadratic_form(self, data, mean):
-        sq_distances = tf.squared_difference(data, tf.expand_dims(mean, 0))
+        tf_sq_distances = tf.squared_difference(data, tf.expand_dims(mean, 0))
 
-        return tf.reduce_sum(sq_distances / self._variance_vector, 1)
+        return tf.reduce_sum(tf_sq_distances / self.tf_variance_vector, 1)
 
     def get_log_determinant(self):
-        return tf.reduce_sum(tf.log(self._variance_vector))
+        return tf.reduce_sum(tf.log(self.tf_variance_vector))
 
     def get_prior_adjustment(self, original, gamma_sum):
-        adjusted = original
-        adjusted *= gamma_sum
-        adjusted += (2.0 * self._beta)
-        adjusted /= gamma_sum + (2.0 * (self._alpha + 1.0))
+        tf_adjusted = original
+        tf_adjusted *= gamma_sum
+        tf_adjusted += (2.0 * self.tf_beta)
+        tf_adjusted /= gamma_sum + (2.0 * (self.tf_alpha + 1.0))
 
-        return adjusted
+        return tf_adjusted
 
     def get_value_updater(self, data, new_mean, gamma_weighted, gamma_sum):
-        new_sq_distances = tf.squared_difference(data, tf.expand_dims(new_mean, 0))
-        new_variance = tf.reduce_sum(new_sq_distances * tf.expand_dims(gamma_weighted, 1), 0)
+        tf_new_sq_distances = tf.squared_difference(data, tf.expand_dims(new_mean, 0))
+        tf_new_variance = tf.reduce_sum(tf_new_sq_distances * tf.expand_dims(gamma_weighted, 1), 0)
 
-        if self._prior:
-            new_variance = self.get_prior_adjustment(new_variance, gamma_sum)
+        if self.has_prior:
+            tf_new_variance = self.get_prior_adjustment(tf_new_variance, gamma_sum)
 
-        return self._variance_vector.assign(new_variance)
+        return self.tf_variance_vector.assign(tf_new_variance)
 
 
 class SparseCovariance(CovarianceBase):
@@ -144,94 +144,94 @@ class SparseCovariance(CovarianceBase):
         self.eigvals = eigvals
         self.eigvecs = eigvecs
         self.prior = prior
+        self.has_prior = None
 
-        self._baseline = None
-        self._eigvals = None
-        self._eigvecs = None
-        self._prior = None
-        self._alpha = None
-        self._beta = None
-        self._rest = None
+        self.tf_baseline = None
+        self.tf_eigvals = None
+        self.tf_eigvecs = None
+        self.tf_alpha = None
+        self.tf_beta = None
+        self.tf_rest = None
 
     def initialize(self, dtype=tf.float64):
-        if self._baseline is None:
-            self._baseline = tf.Variable(self.baseline, dtype)
+        if self.tf_baseline is None:
+            self.tf_baseline = tf.Variable(self.baseline, dtype)
 
-        if self._eigvals is None:
+        if self.tf_eigvals is None:
             if self.eigvals is not None:
-                self._eigvals = tf.Variable(self.eigvals, dtype)
+                self.tf_eigvals = tf.Variable(self.eigvals, dtype)
             else:
-                self._eigvals = tf.Variable(tf.zeros([self.rank], dtype))
+                self.tf_eigvals = tf.Variable(tf.zeros([self.rank], dtype))
 
-        if self._eigvecs is None:
+        if self.tf_eigvecs is None:
             if self.eigvecs is not None:
-                self._eigvecs = tf.Variable(self.eigvecs, dtype)
+                self.tf_eigvecs = tf.Variable(self.eigvecs, dtype)
             else:
-                self._eigvecs = tf.Variable(tf.zeros([self.rank, self.dims], dtype))
+                self.tf_eigvecs = tf.Variable(tf.zeros([self.rank, self.dims], dtype))
 
-        if self._prior is None:
+        if self.has_prior is None:
             if self.prior is not None:
-                self._prior = True
-                self._alpha = tf.constant(self.prior["alpha"], dtype=dtype)
-                self._beta = tf.constant(self.prior["beta"], dtype=dtype)
+                self.has_prior = True
+                self.tf_alpha = tf.constant(self.prior["alpha"], dtype=dtype)
+                self.tf_beta = tf.constant(self.prior["beta"], dtype=dtype)
             else:
-                self._prior = False
+                self.has_prior = False
 
-        if self._rest is None:
-            self._rest = tf.constant(self.dims - self.rank, dtype=dtype)
+        if self.tf_rest is None:
+            self.tf_rest = tf.constant(self.dims - self.rank, dtype=dtype)
 
     def get_matrix(self):
-        base_times_eye = tf.diag(tf.fill([self.dims], self._baseline))
-        eig_vec_val = tf.matmul(tf.transpose(self._eigvecs), tf.diag(self._eigvals))
-        eig_vec_val_vec = tf.matmul(eig_vec_val, self._eigvecs)
+        tf_base_times_eye = tf.diag(tf.fill([self.dims], self.tf_baseline))
+        tf_eig_vec_val = tf.matmul(tf.transpose(self.tf_eigvecs), tf.diag(self.tf_eigvals))
+        tf_eig_vec_val_vec = tf.matmul(tf_eig_vec_val, self.tf_eigvecs)
 
-        return base_times_eye + eig_vec_val_vec
+        return tf_base_times_eye + tf_eig_vec_val_vec
 
     def get_inv_quadratic_form(self, data, mean):
-        differences = tf.subtract(data, tf.expand_dims(mean, 0))
-        diff_times_eig = tf.matmul(differences, tf.transpose(self._eigvecs))
-        factor = 1.0 / (self._baseline + self._eigvals) - 1.0 / self._baseline
+        tf_differences = tf.subtract(data, tf.expand_dims(mean, 0))
+        tf_diff_times_eig = tf.matmul(tf_differences, tf.transpose(self.tf_eigvecs))
+        tf_factor = 1.0 / (self.tf_baseline + self.tf_eigvals) - 1.0 / self.tf_baseline
 
-        base_part = tf.reduce_sum(tf.square(differences) / self._baseline, 1)
-        eig_part = tf.reduce_sum(tf.square(diff_times_eig) * factor, 1)
+        tf_base_part = tf.reduce_sum(tf.square(tf_differences) / self.tf_baseline, 1)
+        tf_eig_part = tf.reduce_sum(tf.square(tf_diff_times_eig) * tf_factor, 1)
 
-        return base_part + eig_part
+        return tf_base_part + tf_eig_part
 
     def get_log_determinant(self):
-        rank_part = tf.reduce_sum(tf.log(self._baseline + self._eigvals))
-        rest_part = tf.log(self._baseline) * self._rest
+        tf_rank_part = tf.reduce_sum(tf.log(self.tf_baseline + self.tf_eigvals))
+        tf_rest_part = tf.log(self.tf_baseline) * self.tf_rest
 
-        return rank_part + rest_part
+        return tf_rank_part + tf_rest_part
 
     def get_prior_adjustment(self, original, gamma_sum):
-        adjusted = original
-        adjusted *= gamma_sum
-        adjusted += tf.diag(tf.fill([self.dims], 2.0 * self._beta))
-        adjusted /= gamma_sum + (2.0 * (self._alpha + 1.0))
+        tf_adjusted = original
+        tf_adjusted *= gamma_sum
+        tf_adjusted += tf.diag(tf.fill([self.dims], 2.0 * self.tf_beta))
+        tf_adjusted /= gamma_sum + (2.0 * (self.tf_alpha + 1.0))
 
-        return adjusted
+        return tf_adjusted
 
     def get_value_updater(self, data, new_mean, gamma_weighted, gamma_sum):
-        new_differences = tf.subtract(data, tf.expand_dims(new_mean, 0))
-        sq_dist_matrix = tf.matmul(tf.expand_dims(new_differences, 2), tf.expand_dims(new_differences, 1))
-        new_covariance = tf.reduce_sum(sq_dist_matrix * tf.expand_dims(tf.expand_dims(gamma_weighted, 1), 2), 0)
+        tf_new_differences = tf.subtract(data, tf.expand_dims(new_mean, 0))
+        tf_sq_dist_matrix = tf.matmul(tf.expand_dims(tf_new_differences, 2), tf.expand_dims(tf_new_differences, 1))
+        tf_new_covariance = tf.reduce_sum(tf_sq_dist_matrix * tf.expand_dims(tf.expand_dims(gamma_weighted, 1), 2), 0)
 
-        if self._prior:
-            new_covariance = self.get_prior_adjustment(new_covariance, gamma_sum)
+        if self.has_prior:
+            tf_new_covariance = self.get_prior_adjustment(tf_new_covariance, gamma_sum)
 
-        s, u, _ = tf.svd(new_covariance)
+        tf_s, tf_u, _ = tf.svd(tf_new_covariance)
 
-        required_eigvals = s[:self.rank]
-        required_eigvecs = u[:, :self.rank]
+        tf_required_eigvals = tf_s[:self.rank]
+        tf_required_eigvecs = tf_u[:, :self.rank]
 
-        new_baseline = (tf.trace(new_covariance) - tf.reduce_sum(required_eigvals)) / self._rest
-        new_eigvals = required_eigvals - new_baseline
-        new_eigvecs = tf.transpose(required_eigvecs)
+        tf_new_baseline = (tf.trace(tf_new_covariance) - tf.reduce_sum(tf_required_eigvals)) / self.tf_rest
+        tf_new_eigvals = tf_required_eigvals - tf_new_baseline
+        tf_new_eigvecs = tf.transpose(tf_required_eigvecs)
 
         return tf.group(
-            self._baseline.assign(new_baseline),
-            self._eigvals.assign(new_eigvals),
-            self._eigvecs.assign(new_eigvecs)
+            self.tf_baseline.assign(tf_new_baseline),
+            self.tf_eigvals.assign(tf_new_eigvals),
+            self.tf_eigvecs.assign(tf_new_eigvecs)
         )
 
 
@@ -241,55 +241,55 @@ class FullCovariance(CovarianceBase):
         self.dims = dims
         self.matrix = matrix
         self.prior = prior
+        self.has_prior = None
 
-        self._covariance_matrix = None
-        self._prior = None
-        self._alpha = None
-        self._beta = None
+        self.tf_covariance_matrix = None
+        self.tf_alpha = None
+        self.tf_beta = None
 
     def initialize(self, dtype=tf.float64):
-        if self._covariance_matrix is None:
+        if self.tf_covariance_matrix is None:
             if self.matrix is not None:
-                self._covariance_matrix = tf.Variable(self.matrix, dtype=dtype)
+                self.tf_covariance_matrix = tf.Variable(self.matrix, dtype=dtype)
             else:
-                self._covariance_matrix = tf.Variable(tf.diag(tf.cast(tf.fill([self.dims], 1.0), dtype)))
+                self.tf_covariance_matrix = tf.Variable(tf.diag(tf.cast(tf.fill([self.dims], 1.0), dtype)))
 
-        if self._prior is None:
+        if self.has_prior is None:
             if self.prior is not None:
-                self._prior = True
-                self._alpha = tf.constant(self.prior["alpha"], dtype=dtype)
-                self._beta = tf.constant(self.prior["beta"], dtype=dtype)
+                self.has_prior = True
+                self.tf_alpha = tf.constant(self.prior["alpha"], dtype=dtype)
+                self.tf_beta = tf.constant(self.prior["beta"], dtype=dtype)
             else:
-                self._prior = False
+                self.has_prior = False
 
     def get_matrix(self):
-        return self._covariance_matrix
+        return self.tf_covariance_matrix
 
     def get_inv_quadratic_form(self, data, mean):
-        differences = tf.subtract(data, tf.expand_dims(mean, 0))
-        diff_times_inv_cov = tf.matmul(differences, tf.matrix_inverse(self._covariance_matrix))
+        tf_differences = tf.subtract(data, tf.expand_dims(mean, 0))
+        tf_diff_times_inv_cov = tf.matmul(tf_differences, tf.matrix_inverse(self.tf_covariance_matrix))
 
-        return tf.reduce_sum(diff_times_inv_cov * differences, 1)
+        return tf.reduce_sum(tf_diff_times_inv_cov * tf_differences, 1)
 
     def get_log_determinant(self):
-        eigvals = tf.self_adjoint_eigvals(self._covariance_matrix)
+        tf_eigvals = tf.self_adjoint_eigvals(self.tf_covariance_matrix)
 
-        return tf.reduce_sum(tf.log(eigvals))
+        return tf.reduce_sum(tf.log(tf_eigvals))
 
     def get_prior_adjustment(self, original, gamma_sum):
-        adjusted = original
-        adjusted *= gamma_sum
-        adjusted += tf.diag(tf.fill([self.dims], 2.0 * self._beta))
-        adjusted /= gamma_sum + (2.0 * (self._alpha + 1.0))
+        tf_adjusted = original
+        tf_adjusted *= gamma_sum
+        tf_adjusted += tf.diag(tf.fill([self.dims], 2.0 * self.tf_beta))
+        tf_adjusted /= gamma_sum + (2.0 * (self.tf_alpha + 1.0))
 
-        return adjusted
+        return tf_adjusted
 
     def get_value_updater(self, data, new_mean, gamma_weighted, gamma_sum):
-        new_differences = tf.subtract(data, tf.expand_dims(new_mean, 0))
-        sq_dist_matrix = tf.matmul(tf.expand_dims(new_differences, 2), tf.expand_dims(new_differences, 1))
-        new_covariance = tf.reduce_sum(sq_dist_matrix * tf.expand_dims(tf.expand_dims(gamma_weighted, 1), 2), 0)
+        tf_new_differences = tf.subtract(data, tf.expand_dims(new_mean, 0))
+        tf_sq_dist_matrix = tf.matmul(tf.expand_dims(tf_new_differences, 2), tf.expand_dims(tf_new_differences, 1))
+        tf_new_covariance = tf.reduce_sum(tf_sq_dist_matrix * tf.expand_dims(tf.expand_dims(gamma_weighted, 1), 2), 0)
 
-        if self._prior:
-            new_covariance = self.get_prior_adjustment(new_covariance, gamma_sum)
+        if self.has_prior:
+            tf_new_covariance = self.get_prior_adjustment(tf_new_covariance, gamma_sum)
 
-        return self._covariance_matrix.assign(new_covariance)
+        return self.tf_covariance_matrix.assign(tf_new_covariance)
