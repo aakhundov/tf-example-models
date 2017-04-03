@@ -237,12 +237,10 @@ class SparseCovariance(CovarianceBase):
 
 class FullCovariance(CovarianceBase):
 
-    def __init__(self, dims, matrix=None, prior=None, approx_log_det=False):
+    def __init__(self, dims, matrix=None, prior=None):
         self.dims = dims
         self.matrix = matrix
         self.prior = prior
-
-        self.approx_log_det = approx_log_det
 
         self._covariance_matrix = None
         self._prior = None
@@ -274,10 +272,9 @@ class FullCovariance(CovarianceBase):
         return tf.reduce_sum(diff_times_inv_cov * differences, 1)
 
     def get_log_determinant(self):
-        if self.approx_log_det:
-            return tf.reduce_sum(tf.log(tf.diag_part(self._covariance_matrix)))
-        else:
-            return tf.log(tf.matrix_determinant(self._covariance_matrix))
+        eigvals = tf.self_adjoint_eigvals(self._covariance_matrix)
+
+        return tf.reduce_sum(tf.log(eigvals))
 
     def get_prior_adjustment(self, original, gamma_sum):
         adjusted = original
