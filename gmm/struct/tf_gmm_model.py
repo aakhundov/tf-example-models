@@ -38,6 +38,9 @@ class MixtureModel:
             self.mapping[worker_id].append(component_id)
 
     def _initialize_data_sources(self):
+        self.tf_input_sources = None
+        self.tf_worker_data = None
+
         with self.tf_graph.as_default():
             self.tf_input_sources = []
             for data in self.data:
@@ -54,6 +57,10 @@ class MixtureModel:
                     )
 
     def _initialize_variables(self, dtype):
+        self.tf_dims = None
+        self.tf_num_points = None
+        self.tf_weights = None
+
         with self.tf_graph.as_default():
             self.tf_dims = tf.constant(self.dims, dtype=dtype)
             self.tf_num_points = tf.constant(self.num_points, dtype=dtype)
@@ -64,6 +71,10 @@ class MixtureModel:
             )
 
     def _initialize_graph(self, dtype=tf.float64):
+        self.tf_train_step = None
+        self.tf_component_parameters = None
+        self.tf_mean_log_likelihood = None
+
         with self.tf_graph.as_default():
             tf_component_log_probabilities = []
             for worker_id in self.mapping.keys():
