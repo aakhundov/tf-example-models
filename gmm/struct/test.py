@@ -1,10 +1,11 @@
 import numpy as np
 import tensorflow as tf
 
-import tf_gmm_cov
-import tf_gmm_dist
-import tf_gmm_model
-import tf_gmm_tools
+import covariances
+import distributions
+import models
+
+import utils
 
 
 def feedback_sub(step, current_log_likelihood, difference):
@@ -18,7 +19,7 @@ def feedback_sub(step, current_log_likelihood, difference):
 
 def test_gmm(num_points, components, dimensions, rank, tolerance, training_steps, cluster=None):
     print("Generating data...")
-    synthetic_data, true_means, true_covariances, true_weights, responsibilities = tf_gmm_tools.generate_gmm_data(
+    synthetic_data, true_means, true_covariances, true_weights, responsibilities = utils.generate_gmm_data(
         num_points, components, dimensions, seed=10, diagonal=False)
 
     print("Computing avg. covariance...")
@@ -28,25 +29,25 @@ def test_gmm(num_points, components, dimensions, rank, tolerance, training_steps
     mixture_components = []
     for c in range(components):
         mixture_components.append(
-            tf_gmm_dist.GaussianDistribution(
+            distributions.GaussianDistribution(
                 dims=dimensions,
                 mean=synthetic_data[c],
-                # covariance=tf_gmm_cov.IsotropicCovariance(
+                # covariance=covariances.IsotropicCovariance(
                 #     dimensions,
                 #     scalar=avg_data_variance,
                 #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
-                # covariance=tf_gmm_cov.DiagonalCovariance(
+                # covariance=covariances.DiagonalCovariance(
                 #     dimensions,
                 #     vector=np.full((dimensions,), avg_data_variance),
                 #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
-                covariance=tf_gmm_cov.SparseCovariance(
+                covariance=covariances.SparseCovariance(
                     dimensions, rank,
                     baseline=avg_data_variance,
                     prior={"alpha": 1.0, "beta": 1.0}
                 ),
-                # covariance=tf_gmm_cov.FullCovariance(
+                # covariance=covariances.FullCovariance(
                 #     dimensions,
                 #     matrix=np.diag(np.full((dimensions,), avg_data_variance)),
                 #     prior={"alpha": 1.0, "beta": 1.0}
@@ -55,7 +56,7 @@ def test_gmm(num_points, components, dimensions, rank, tolerance, training_steps
         )
 
     print("Initializing model...")
-    gmm = tf_gmm_model.MixtureModel(synthetic_data, mixture_components, cluster=cluster)
+    gmm = models.MixtureModel(synthetic_data, mixture_components, cluster=cluster)
 
     print("Training model...\n")
     result = gmm.train(tolerance=tolerance, max_steps=training_steps, feedback=feedback_sub)
@@ -63,7 +64,7 @@ def test_gmm(num_points, components, dimensions, rank, tolerance, training_steps
     final_means = np.stack([result[2][i][0] for i in range(components)])
     final_covariances = np.stack([result[2][i][1] for i in range(components)])
 
-    tf_gmm_tools.plot_fitted_data(
+    utils.plot_fitted_data(
         synthetic_data[:, :2],
         final_means[:, :2], final_covariances[:, :2, :2],
         true_means[:, :2], true_covariances[:, :2, :2]
@@ -74,7 +75,7 @@ def test_gmm(num_points, components, dimensions, rank, tolerance, training_steps
 
 def test_cmm(num_points, components, dimensions, tolerance, training_steps, cluster=None):
     print("Generating data...")
-    synthetic_data, val_counts, true_means, true_weights, responsibilities = tf_gmm_tools.generate_cmm_data(
+    synthetic_data, val_counts, true_means, true_weights, responsibilities = utils.generate_cmm_data(
         num_points, components, dimensions, seed=10, count_range=(2, 10)
     )
 
@@ -82,13 +83,13 @@ def test_cmm(num_points, components, dimensions, tolerance, training_steps, clus
     mixture_components = []
     for c in range(components):
         mixture_components.append(
-            tf_gmm_dist.CategoricalDistribution(
+            distributions.CategoricalDistribution(
                 val_counts
             )
         )
 
     print("Initializing model...")
-    gmm = tf_gmm_model.MixtureModel(synthetic_data, mixture_components, cluster=cluster)
+    gmm = models.MixtureModel(synthetic_data, mixture_components, cluster=cluster)
 
     print("Training model...\n")
     result = gmm.train(tolerance=tolerance, max_steps=training_steps, feedback=feedback_sub)
@@ -99,7 +100,7 @@ def test_cmm(num_points, components, dimensions, tolerance, training_steps, clus
 def test_cgmm(num_points, components, g_dimensions, g_rank, c_dimensions, tolerance, training_steps, cluster=None):
     print("Generating data...")
     c_data, g_data, c_counts, c_means, g_means, g_covariances, \
-        true_weights, responsibilities = tf_gmm_tools.generate_cgmm_data(
+        true_weights, responsibilities = utils.generate_cgmm_data(
             num_points, components, c_dimensions, g_dimensions, seed=20)
 
     print("Computing avg. covariance...")
@@ -107,32 +108,32 @@ def test_cgmm(num_points, components, g_dimensions, g_rank, c_dimensions, tolera
 
     print("Initializing components...")
     mixture_components = [
-        tf_gmm_dist.ProductDistribution([
-            tf_gmm_dist.GaussianDistribution(
+        distributions.ProductDistribution([
+            distributions.GaussianDistribution(
                 dims=g_dimensions,
                 mean=g_data[comp],
-                # covariance=tf_gmm_cov.IsotropicCovariance(
+                # covariance=covariances.IsotropicCovariance(
                 #     g_dimensions,
                 #     scalar=avg_g_data_variance,
                 #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
-                # covariance=tf_gmm_cov.DiagonalCovariance(
+                # covariance=covariances.DiagonalCovariance(
                 #     g_dimensions,
                 #     vector=np.full((g_dimensions,), avg_g_data_variance),
                 #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
-                covariance=tf_gmm_cov.SparseCovariance(
+                covariance=covariances.SparseCovariance(
                     g_dimensions, g_rank,
                     baseline=avg_g_data_variance,
                     prior={"alpha": 1.0, "beta": 1.0}
                 ),
-                # covariance=tf_gmm_cov.FullCovariance(
+                # covariance=covariances.FullCovariance(
                 #     g_dimensions,
                 #     matrix=np.diag(np.full((g_dimensions,), avg_g_data_variance)),
                 #     prior={"alpha": 1.0, "beta": 1.0}
                 # ),
             ),
-            tf_gmm_dist.CategoricalDistribution(
+            distributions.CategoricalDistribution(
                 c_counts
             )
         ])
@@ -140,7 +141,7 @@ def test_cgmm(num_points, components, g_dimensions, g_rank, c_dimensions, tolera
     ]
 
     print("Initializing model...")
-    gmm = tf_gmm_model.MixtureModel([g_data, c_data], mixture_components, cluster=cluster)
+    gmm = models.MixtureModel([g_data, c_data], mixture_components, cluster=cluster)
 
     print("Training model...\n")
     result = gmm.train(tolerance=tolerance, max_steps=training_steps, feedback=feedback_sub)
@@ -148,7 +149,7 @@ def test_cgmm(num_points, components, g_dimensions, g_rank, c_dimensions, tolera
     final_g_means = np.stack([result[2][i][0][0] for i in range(components)])
     final_g_covariances = np.stack([result[2][i][0][1] for i in range(components)])
 
-    tf_gmm_tools.plot_fitted_data(
+    utils.plot_fitted_data(
         g_data[:, :2],
         final_g_means[:, :2], final_g_covariances[:, :2, :2],
         g_means[:, :2], g_covariances[:, :2, :2]
