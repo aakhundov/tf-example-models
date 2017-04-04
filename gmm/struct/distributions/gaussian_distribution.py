@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 from distribution_base import DistributionBase
+from full_covariance import FullCovariance
 
 
 class GaussianDistribution(DistributionBase):
@@ -28,7 +29,7 @@ class GaussianDistribution(DistributionBase):
             if self.covariance is not None:
                 self.tf_covariance = self.covariance
             else:
-                self.tf_covariance = tf_gmm_cov.FullCovariance(self.dims)
+                self.tf_covariance = FullCovariance(self.dims)
 
             self.tf_covariance.initialize(dtype)
 
