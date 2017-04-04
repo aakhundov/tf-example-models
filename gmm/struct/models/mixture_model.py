@@ -32,12 +32,10 @@ class MixtureModel:
             self.workers = ["/job:worker/task:" + str(i) for i in range(cluster.num_tasks("worker"))]
 
     def _initialize_component_mapping(self):
-        self.mapping = {
-            w: [] for w in range(len(self.workers))
-        }
+        self.mapping = []
         for component_id in range(len(self.components)):
             worker_id = component_id % len(self.workers)
-            self.mapping[worker_id].append(component_id)
+            self.mapping.append(worker_id)
 
     def _initialize_data_sources(self):
         self.tf_input_sources = None
@@ -79,15 +77,15 @@ class MixtureModel:
 
         with self.tf_graph.as_default():
             tf_component_log_probabilities = []
-            for worker_id in self.mapping.keys():
-                for component_id in self.mapping[worker_id]:
-                    with tf.device(self.workers[worker_id]):
-                        self.components[component_id].initialize(dtype)
-                        tf_component_log_probabilities.append(
-                            self.components[component_id].get_log_probabilities(
-                                self.tf_worker_data[worker_id]
-                            )
+            for component_id in range(len(self.components)):
+                worker_id = self.mapping[component_id]
+                with tf.device(self.workers[worker_id]):
+                    self.components[component_id].initialize(dtype)
+                    tf_component_log_probabilities.append(
+                        self.components[component_id].get_log_probabilities(
+                            self.tf_worker_data[worker_id]
                         )
+                    )
 
             tf_log_components = tf.parallel_stack(tf_component_log_probabilities)
             tf_log_weighted = tf_log_components + tf.expand_dims(tf.log(self.tf_weights), 1)
@@ -105,16 +103,16 @@ class MixtureModel:
             tf_gamma_weighted_split = tf.unstack(tf_gamma_weighted)
 
             tf_component_updaters = []
-            for worker_id in self.mapping.keys():
-                for component_id in self.mapping[worker_id]:
-                    with tf.device(self.workers[worker_id]):
-                        tf_component_updaters.extend(
-                            self.components[component_id].get_parameter_updaters(
-                                self.tf_worker_data[worker_id],
-                                tf_gamma_weighted_split[component_id],
-                                tf_gamma_sum_split[component_id]
-                            )
+            for component_id in range(len(self.components)):
+                worker_id = self.mapping[component_id]
+                with tf.device(self.workers[worker_id]):
+                    tf_component_updaters.extend(
+                        self.components[component_id].get_parameter_updaters(
+                            self.tf_worker_data[worker_id],
+                            tf_gamma_weighted_split[component_id],
+                            tf_gamma_sum_split[component_id]
                         )
+                    )
 
             tf_new_weights = tf_gamma_sum / self.tf_num_points
             tf_weights_updater = self.tf_weights.assign(tf_new_weights)
