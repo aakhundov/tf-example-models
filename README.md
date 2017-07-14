@@ -1,5 +1,5 @@
 # tf-example-models
-TensorFlow-based simple implementations of several machine learning models (first three - LogReg, MLP, and CNN - inspired by Google tutorials from tensorflow.org):
+TensorFlow-based implementations of several machine learning models (first three - LogReg, MLP, and CNN - inspired by Google tutorials from tensorflow.org). **models** folder contains simple implementations of:
 
 * Logistic Regression (tf_logreg.py)
 * Multi-layer Perceptron (tf_mlp.py)
@@ -7,4 +7,4 @@ TensorFlow-based simple implementations of several machine learning models (firs
 * K-Means Clustering (tf_kmeans.py)
 * Gaussian Mixture Model (tf_gmm.py)
 
-**gmm** folder contains various implementations (diagonal covariance, full covariance, gradient-based) of a Gaussian Mixture Model in TensorFlow. **gmm/struct** folder contains initial attempts to structurize TF-based GMM implementation.
+**gmm** folder contains more elaborate versions of a Gaussian Mixture Model implementation (with diagonal covariance, full covariance, gradient-based). **gmm/struct** folder contains initial attempts to structurize the GMM implementation into a set of classes.
