@@ -118,14 +118,14 @@ with tf.Session() as sess:
         if step > 0:
             # computing difference between consecutive log-likelihoods
             difference = current_likelihood - previous_likelihood
-            print("{0}:\tmean-likelihood {1:.8f}\tdifference {2}".format(
+            print("{0}:\tmean-likelihood {1:.12f}\tdifference {2}".format(
                 step, current_likelihood, difference))
 
             # stopping if TOLERANCE was reached
             if difference <= TOLERANCE:
                 break
         else:
-            print("{0}:\tmean-likelihood {1:.8f}".format(
+            print("{0}:\tmean-likelihood {1:.12f}".format(
                 step, current_likelihood))
 
         previous_likelihood = current_likelihood

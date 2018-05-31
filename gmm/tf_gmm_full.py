@@ -4,17 +4,15 @@ import tensorflow as tf
 import tf_gmm_tools
 
 
-DIMENSIONS = 2
-COMPONENTS = 10
-NUM_POINTS = 10000
-
 TRAINING_STEPS = 1000
 TOLERANCE = 10e-6
 
 
-# PREPARING DATA
+DIMENSIONS = 2
+COMPONENTS = 10
+NUM_POINTS = 10000
 
-# generating DATA_POINTS points from a GMM with COMPONENTS components
+print("Generating data...")
 data, true_means, true_covariances, true_weights, responsibilities = tf_gmm_tools.generate_gmm_data(
     NUM_POINTS, COMPONENTS, DIMENSIONS, seed=10, diagonal=False)
 
@@ -120,14 +118,14 @@ with tf.Session() as sess:
         if step > 0:
             # computing difference between consecutive log-likelihoods
             difference = np.abs(current_likelihood - previous_likelihood)
-            print("{0}:\tmean-likelihood {1:.8f}\tdifference {2}".format(
+            print("{0}:\tmean-likelihood {1:.12f}\tdifference {2}".format(
                 step, current_likelihood, difference))
 
             # stopping if TOLERANCE was reached
             if difference <= TOLERANCE:
                 break
         else:
-            print("{0}:\tmean-likelihood {1:.8f}".format(
+            print("{0}:\tmean-likelihood {1:.12f}".format(
                 step, current_likelihood))
 
         previous_likelihood = current_likelihood
